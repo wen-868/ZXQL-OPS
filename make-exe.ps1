@@ -92,6 +92,7 @@ class SelfExtractor {
     if (!File.Exists(verFile)) {
       Console.WriteLine("目标目录: " + outDir);
       Console.WriteLine("正在解压，请稍候（首次运行约需几分钟）...");
+      Directory.CreateDirectory(outDir);
       var psi = new ProcessStartInfo(tarExe, "-xf \"" + payload + "\" -C \"" + outDir + "\"") {
         UseShellExecute = false, CreateNoWindow = true,
         RedirectStandardOutput = true, RedirectStandardError = true

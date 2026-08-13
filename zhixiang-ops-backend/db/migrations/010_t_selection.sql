@@ -2,7 +2,7 @@
 -- 选品库 + 选品清单；按 tenant_id 强隔离；human_driver 映射 D 字典（选品→内容 R 联动）
 -- 由 TypeORM 同步生成（AUTO=True），也可落本文件供 CI/生产显式执行。
 
-CREATE TABLE ops_selection_products (
+CREATE TABLE IF NOT EXISTS ops_selection_products (
   id                  INT AUTO_INCREMENT PRIMARY KEY,
   tenant_id           VARCHAR(64)  NOT NULL,
   source              VARCHAR(32)  NOT NULL COMMENT 'platform(平台开放API)/manual(手动录入)/system(管理系统)',
@@ -26,7 +26,7 @@ CREATE TABLE ops_selection_products (
   INDEX idx_sp_category (category)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE ops_selection_lists (
+CREATE TABLE IF NOT EXISTS ops_selection_lists (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   tenant_id   VARCHAR(64) NOT NULL,
   name        VARCHAR(128) NOT NULL,

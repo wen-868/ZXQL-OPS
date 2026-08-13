@@ -76,7 +76,7 @@ Write-Host '=== 4. 生成生产 .env ===' -ForegroundColor Cyan
 $envSrc = Join-Path $BACKEND '.env'
 $envLines = Get-Content $envSrc -Encoding utf8
 $envLines = $envLines -replace '^NODE_ENV=.*', 'NODE_ENV=production'
-$envLines = $envLines -replace '^OPS_DEMO_MODE=.*', 'OPS_DEMO_MODE=false'
+$envLines = $envLines -replace '^OPS_DEMO_MODE=.*', 'OPS_DEMO_MODE=true'
 # 交付包安全默认：清空可能含真实凭证的密钥，部署时再填（避免密钥随包泄露）
 $envLines = $envLines -replace '^OPS_LLM_GATEWAY_KEY=.*', 'OPS_LLM_GATEWAY_KEY='
 $header = @(
@@ -91,11 +91,13 @@ $header = @(
   '#   3. OPS_INTEGRATION_MODE=connected 时填 OPS_MS_CLIENT_ID/SECRET',
   '#   4. OPS_OSS_*：生产建议配置对象存储（默认落本地 ./uploads）',
   '#   5. OPS_LLM_GATEWAY_KEY：已清空（避免密钥随包泄露），部署时按需填免费模型 Key',
+  '#   6. OPS_DEMO_MODE=true：登录页免密“演示登录”一键进入演示租户（t_demo，随包内置演示数据）',
+  '#     正式使用时建议改为 false（admin/Admin@123 正常登录）',
   '# ============================================================',
   ''
 )
 ($header + $envLines) | Out-File -FilePath (Join-Path $outBackend '.env') -Encoding utf8
-Write-Host '生产 .env 已生成（NODE_ENV=production, OPS_DEMO_MODE=false）' -ForegroundColor Green
+Write-Host '生产 .env 已生成（NODE_ENV=production, OPS_DEMO_MODE=true 免密演示登录）' -ForegroundColor Green
 
 Write-Host ''
 Write-Host '=== 5. 拷贝前端 ===' -ForegroundColor Cyan
@@ -159,6 +161,12 @@ $readme = @"
 2. DB_PASSWORD：与随包 MariaDB root 密码一致
 3. OPS_INTEGRATION_MODE=connected 时填 OPS_MS_CLIENT_ID/SECRET
 4. OPS_OSS_*：生产建议配置对象存储
+5. OPS_LLM_GATEWAY_KEY：已清空，部署时按需填写
+6. OPS_DEMO_MODE=true 时登录页可免密“演示登录”（一键进入 t_demo 演示租户）
+
+## 默认账号
+- 演示登录：登录页“演示登录”按钮（免密，OPS_DEMO_MODE=true 时可用）
+- 正式账号：admin / Admin@123（t_demo 租户管理员）
 
 ## 依赖决策
 - node_modules 原样随包（离线可用）

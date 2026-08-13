@@ -24,7 +24,7 @@ $BACKEND   = Join-Path $ROOT 'backend'
 $FRONTEND  = Join-Path $ROOT 'frontend'
 $MARIADB_ZIP = (Join-Path (Join-Path $ROOT 'tools') 'mariadb.zip')
 $MARIADB_DIR = (Join-Path (Join-Path $ROOT 'tools') 'mariadb')
-$MARIADB_BIN = (Join-Path (Join-Path (Join-Path (Join-Path $MARIADB_DIR 'mariadb-11.4.5-winx64') 'bin') 'mysqld.exe')
+$MARIADB_BIN = (Join-Path (Join-Path (Join-Path $MARIADB_DIR 'mariadb-11.4.5-winx64') 'bin') 'mysqld.exe')
 $MARIADB_DATA= (Join-Path $MARIADB_DIR 'data')
 $REDIS     = (Join-Path (Join-Path $ROOT 'tools') 'redis-server.exe')
 $LOGDIR    = Join-Path $ROOT 'logs'
@@ -50,8 +50,8 @@ function Wait-Http($uri, $timeoutSec = 60) {
   }
   return $false
 }
-function Save-Pid($name, $pid) {
-  $pid | Out-File -FilePath (Join-Path $LOGDIR "$name.pid") -Encoding ascii
+function Save-Pid($name, $processId) {
+  $processId | Out-File -FilePath (Join-Path $LOGDIR "$name.pid") -Encoding ascii
 }
 function Stop-ByPid($name) {
   $pf = Join-Path $LOGDIR "$name.pid"
@@ -116,7 +116,11 @@ Start-Sleep -Seconds 2
 # ============ 3. 数据库迁移（幂等）============
 Log '▶ 执行数据库迁移（建表，已存在则跳过）…'
 Push-Location $BACKEND
-& node (Join-Path (Join-Path (Join-Path $BACKEND 'dist') 'db') 'migrate.js') 2>&1 | ForEach-Object { Log "[migrate] $_" }
+$migJs = Join-Path (Join-Path (Join-Path $BACKEND 'dist') 'db') 'migrate.js'
+# 用 cmd /c 合并 node 的 stderr 到 stdout，避免 $ErrorActionPreference='Stop' 下
+# migrate.js 的“表已存在跳过”类提示被当作终止错误导致启动中断。
+$migOut = & cmd.exe /d /c "node `"$migJs`" 2>&1"
+$migOut | ForEach-Object { Log "[migrate] $_" }
 Pop-Location
 Log '✅ 迁移完成'
 
@@ -143,7 +147,7 @@ Log '✅ 门户已就绪 (8080)'
 # ============ 6. 启动自检 ============
 Log '▶ 启动自检（健康 + 关键接口）…'
 $okHealth = Wait-Http 'http://127.0.0.1:8080/api/ops/health' -timeoutSec 5
-$okAuth   = (Invoke-WebRequest -Uri 'http://127.0.0.1:8080/api/ops/auth/status' -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200
+$okAuth   = (Invoke-WebRequest -Uri 'http://127.0.0.1:8080/api/ops/system/status' -Headers @{'x-tenant-id'=$Tenant} -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200
 if ($okHealth -and $okAuth) { Log '✅ 自检通过：health + auth/status 均 200' }
 else { Log "⚠ 自检部分未通过（health=$okHealth, auth=$okAuth）" }
 

@@ -29,6 +29,10 @@ zhixiang-ops-release/
 *.exe
 *.tar
 
+# ===== 桌面客户端构建产物（保留 DesktopApp.cs / DesktopInstaller.cs 源码）=====
+desktop/*.dll
+desktop/logo.ico
+
 # ===== IDE / 编辑器 =====
 .idea/
 .vscode/
