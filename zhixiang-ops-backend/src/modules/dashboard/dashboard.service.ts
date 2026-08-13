@@ -4,19 +4,19 @@ import { DataSource } from 'typeorm';
 import { TenantContext } from '../../tenant/tenant-context';
 
 export interface DashboardStats {
-  /** 账号数 */
+  /** 账号�?*/
   accounts: number;
-  /** 脚本数 */
+  /** 脚本�?*/
   scripts: number;
-  /** 素材数 */
+  /** 素材�?*/
   materials: number;
-  /** 视频成片数 */
+  /** 视频成片�?*/
   videos: number;
-  /** 发布任务数 */
+  /** 发布任务�?*/
   publishes: number;
-  /** 选题数 */
+  /** 选题�?*/
   topics: number;
-  /** 情报数 */
+  /** 情报�?*/
   intels: number;
 }
 

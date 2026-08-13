@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import { Public } from '../../auth/public.decorator';
 import { DashboardService } from './m.service';
 import { CreateDashboardDto, UpdateDashboardDto } from './dto';
 
@@ -7,36 +8,42 @@ import { CreateDashboardDto, UpdateDashboardDto } from './dto';
  * 路由前缀 ops（全局前缀 api → /api/ops/*）。统一 BI 聚合层：核心指标卡/趋势、全链路漏斗、
  * 账号对比、选题效能榜、人性钩子分析、仪表盘配置 CRUD。租户隔离由服务层强约束。
  * 注：原 J(recycle) 控制器的 /dashboard/overview、/dashboard/driver-efficiency 已迁至此（避免路由冲突）。
+ * 只读聚合接口标记 @Public（决策看板免登门户 + 租户头隔离），配置 CRUD 保持鉴权。
  */
 @Controller('ops')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   /** GET /api/ops/dashboard/overview — 核心指标卡 + 趋势（五维四率，复用 J） */
+  @Public()
   @Get('dashboard/overview')
   getOverview() {
     return this.dashboardService.getOverview();
   }
 
   /** GET /api/ops/dashboard/funnel — 全链路漏斗（内容生产率→分发覆盖→触达→互动→转化→收益） */
+  @Public()
   @Get('dashboard/funnel')
   getFunnel() {
     return this.dashboardService.getFunnel();
   }
 
   /** GET /api/ops/dashboard/account-compare — 账号对比 */
+  @Public()
   @Get('dashboard/account-compare')
   getAccountCompare() {
     return this.dashboardService.getAccountCompare();
   }
 
   /** GET /api/ops/dashboard/topic-efficiency — 选题效能榜 */
+  @Public()
   @Get('dashboard/topic-efficiency')
   getTopicEfficiency() {
     return this.dashboardService.getTopicEfficiency();
   }
 
   /** GET /api/ops/dashboard/human-hook — 人性钩子分析（7×6，复用 J 人性效能） */
+  @Public()
   @Get('dashboard/human-hook')
   getHumanHook() {
     return this.dashboardService.getHumanHook();

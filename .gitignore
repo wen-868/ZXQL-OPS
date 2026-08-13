@@ -23,6 +23,12 @@ uploads/
 tools/
 *.zip
 
+# ===== 发布产物 =====
+ops-release/
+zhixiang-ops-release/
+*.exe
+*.tar
+
 # ===== IDE / 编辑器 =====
 .idea/
 .vscode/

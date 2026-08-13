@@ -150,9 +150,23 @@ Write-Host '引导器已编译' -ForegroundColor Green
 
 Write-Host ''
 Write-Host '=== D. 嵌入 tar 到 EXE 尾部 ===' -ForegroundColor Cyan
-$tarBytes = [IO.File]::ReadAllBytes($RELEASE_TAR)
-[IO.File]::AppendAllBytes($SELF_EXE, $tarBytes)
-[IO.File]::AppendAllBytes($SELF_EXE, [BitConverter]::GetBytes([long]$tarBytes.Length))
+# .NET Framework 4.8 (PS 5.1) 无 File.AppendAllBytes，用 FileStream 流式追加（避免整包读入内存）
+$src = [IO.File]::OpenRead($RELEASE_TAR)
+$dst = [IO.File]::Open($SELF_EXE, [IO.FileMode]::Append, [IO.FileAccess]::Write)
+$buf = New-Object byte[] 1048576
+$total = 0
+try {
+  while (($r = $src.Read($buf, 0, $buf.Length)) -gt 0) {
+    $dst.Write($buf, 0, $r)
+    $total += $r
+  }
+} finally {
+  $src.Close()
+  $dst.Close()
+}
+$lenBytes = [BitConverter]::GetBytes([long]$total)
+$dst2 = [IO.File]::Open($SELF_EXE, [IO.FileMode]::Append, [IO.FileAccess]::Write)
+try { $dst2.Write($lenBytes, 0, 8) } finally { $dst2.Close() }
 Write-Host '已嵌入内嵌包' -ForegroundColor Green
 
 Move-Item $SELF_EXE $FINAL -Force
