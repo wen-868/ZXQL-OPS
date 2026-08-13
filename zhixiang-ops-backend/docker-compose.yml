@@ -1,0 +1,64 @@
+# 智享运营系统 · 本地依赖编排（MySQL + Redis）
+# 与 src/config/env.ts / .env.example 严格对齐：
+#   DB_PORT=3306 / DB_USER=root / DB_PASSWORD=your_password / DB_NAME=zhixiang_ops
+#   REDIS_PORT=6379 / REDIS_URL=redis://127.0.0.1:6379（无密码）
+#
+# 用法：
+#   docker compose up -d            # 启动
+#   docker compose ps               # 查看健康
+#   docker compose down             # 停止并保留数据
+#   docker compose down -v         # 停止并清空数据卷
+#
+# 注意：示例凭据仅用于本地开发。生产环境请改用强密码并尽量走外部托管。
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ops-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: your_password
+      MYSQL_DATABASE: zhixiang_ops
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - "3306:3306"
+    volumes:
+      - ops-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pyour_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ops-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: ops-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ops-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - ops-net
+
+volumes:
+  ops-mysql-data:
+  ops-redis-data:
+
+networks:
+  ops-net:
+    driver: bridge

@@ -1,0 +1,45 @@
+-- 004 D 人性分析（阶段1 第三步）
+CREATE TABLE IF NOT EXISTS ops_analysis_tasks (
+  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tenant_id       VARCHAR(36)     NOT NULL,
+  source          VARCHAR(16)     NOT NULL DEFAULT 'comments',
+  platform        VARCHAR(32)     NULL,
+  input_refs      JSON            NULL,
+  status          VARCHAR(16)     NOT NULL DEFAULT 'pending',
+  progress        INT             NOT NULL DEFAULT 0,
+  total_comments  INT             NOT NULL DEFAULT 0,
+  driver_counts   JSON            NULL COMMENT '7 人性分布计数',
+  emotion_scores  JSON            NULL COMMENT '6 情绪强度评分',
+  top_drivers     JSON            NULL COMMENT 'Top N 人性',
+  top_emotions    JSON            NULL COMMENT 'Top N 情绪',
+  insights        JSON            NULL COMMENT '分析洞察文本',
+  model_used      VARCHAR(64)     NOT NULL DEFAULT '',
+  prompt_version  VARCHAR(32)     NOT NULL DEFAULT 'v1',
+  error_msg       TEXT            NULL,
+  finished_at     DATETIME        NULL,
+  created_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  deleted_at      DATETIME(6)     NULL,
+  PRIMARY KEY (id),
+  KEY idx_at_tenant (tenant_id),
+  KEY idx_at_status (tenant_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分析任务';
+
+CREATE TABLE IF NOT EXISTS ops_human_insights (
+  id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tenant_id       VARCHAR(36)     NOT NULL,
+  category        VARCHAR(32)     NOT NULL,
+  driver          VARCHAR(16)     NOT NULL COMMENT '7 人性',
+  emotion         VARCHAR(16)     NOT NULL COMMENT '6 情绪',
+  title           VARCHAR(255)    NOT NULL,
+  content         TEXT            NOT NULL,
+  tags            JSON            NULL,
+  ref_analysis_id BIGINT          NULL,
+  usage_count     INT             NOT NULL DEFAULT 0,
+  created_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  deleted_at      DATETIME(6)     NULL,
+  PRIMARY KEY (id),
+  KEY idx_hi_tenant (tenant_id),
+  KEY idx_hi_driver_emotion (tenant_id, driver, emotion)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人性洞察';

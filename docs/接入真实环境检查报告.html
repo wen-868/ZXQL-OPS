@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智享全链运营系统 · 接入真实环境检查报告</title>
+<style>
+  :root {
+    --green: #16a34a; --green-bg: #f0fdf4; --green-bd: #86efac;
+    --amber: #d97706; --amber-bg: #fffbeb; --amber-bd: #fcd34d;
+    --red: #dc2626; --red-bg: #fef2f2; --red-bd: #fca5a5;
+    --blue: #2563eb; --blue-bg: #eff6ff; --blue-bd: #93c5fd;
+    --gray: #6b7280; --gray-bg: #f9fafb; --gray-bd: #d1d5db;
+    --text: #1f2937; --text-sec: #4b5563;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; background:#f3f4f6; color:var(--text); line-height:1.6; }
+  .container { max-width:1200px; margin:0 auto; padding:32px 24px; }
+  h1 { font-size:28px; font-weight:700; margin-bottom:8px; }
+  .subtitle { color:var(--text-sec); margin-bottom:32px; }
+  .badge { display:inline-flex; align-items:center; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+  .badge.green { background:var(--green-bg); color:var(--green); border:1px solid var(--green-bd); }
+  .badge.amber  { background:var(--amber-bg); color:var(--amber); border:1px solid var(--amber-bd); }
+  .badge.red    { background:var(--red-bg);   color:var(--red);   border:1px solid var(--red-bd); }
+  .badge.blue   { background:var(--blue-bg);  color:var(--blue);  border:1px solid var(--blue-bd); }
+  .section { background:#fff; border-radius:12px; padding:24px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .section h2 { font-size:18px; font-weight:700; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .section h3 { font-size:15px; font-weight:600; margin:16px 0 8px; color:var(--text-sec); }
+  .summary-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:12px; margin-bottom:24px; }
+  .summary-card { border-radius:10px; padding:16px; text-align:center; background:var(--gray-bg); border:1px solid var(--gray-bd); }
+  .summary-card .num { font-size:32px; font-weight:800; }
+  .summary-card .label { font-size:13px; color:var(--text-sec); margin-top:4px; }
+  .summary-card.ok .num { color:var(--green); }
+  .summary-card.warn .num { color:var(--amber); }
+  .summary-card.err .num { color:var(--red); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:10px 12px; background:var(--gray-bg); border-bottom:2px solid var(--gray-bd); font-weight:600; color:var(--text-sec); }
+  td { padding:10px 12px; border-bottom:1px solid var(--gray-bd); vertical-align:top; }
+  tr:hover td { background:var(--gray-bg); }
+  .code-key { font-family:'Cascadia Code',Consolas,monospace; font-size:12px; background:#e5e7eb; padding:1px 6px; border-radius:4px; }
+  .code-val { font-family:'Cascadia Code',Consolas,monospace; font-size:12px; color:var(--text-sec); }
+  .desc { color:var(--text-sec); font-size:12px; margin-top:4px; }
+  .action-list { list-style:none; }
+  .action-list li { padding:8px 0; border-bottom:1px solid var(--gray-bd); display:flex; align-items:flex-start; gap:10px; }
+  .action-list li:last-child { border-bottom:none; }
+  .priority-tag { display:inline-block; padding:1px 8px; border-radius:8px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .priority-tag.p0 { background:#fee2e2; color:#991b1b; }
+  .priority-tag.p1 { background:#fef3c7; color:#92400e; }
+  .priority-tag.p2 { background:#dbeafe; color:#1e40af; }
+  .tag-row { display:flex; gap:4px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>智享全链运营系统</h1>
+<p class="subtitle">接入真实环境检查报告 · 2026-08-10 · 基于完整代码审计</p>
+
+<!-- ============ 总览 ============ -->
+<div class="section">
+  <h2>📊 检查总览</h2>
+  <div class="summary-grid">
+    <div class="summary-card ok">
+      <div class="num">19</div>
+      <div class="label">已接入生产可用</div>
+    </div>
+    <div class="summary-card warn">
+      <div class="num">5</div>
+      <div class="label">部分模拟/有降级</div>
+    </div>
+    <div class="summary-card err">
+      <div class="num">4</div>
+      <div class="label">Standalone 未接入</div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--text-sec)">
+    当前 <span class="code-key">OPS_INTEGRATION_MODE=standalone</span>（默认），所有跨系统适配器为
+    <span class="code-key">NotImplementedAdapter</span>。
+    切换到 <span class="code-key">connected</span> 需配置管理系统服务账号凭证
+    <span class="code-key">OPS_MS_CLIENT_ID</span> + <span class="code-key">OPS_MS_CLIENT_SECRET</span>，
+    以及抖音开放平台 <span class="code-key">OPS_DOUYIN_APP_ID</span>/<span class="code-key">SECRET</span>。
+  </p>
+</div>
+
+<!-- ============ 一、已接入生产可用（19 项） ============ -->
+<div class="section">
+  <h2>✅ 已接入生产可用 <span class="badge green">19 项</span></h2>
+  <table>
+    <thead><tr><th style="width:24%">模块</th><th style="width:24%">能力</th><th style="width:26%">接入方式</th><th style="width:26%">备注</th></tr></thead>
+    <tbody>
+      <tr><td>🗂️ DB / Redis</td><td>数据持久化</td><td>MariaDB + Redis 本地实例</td><td>所有 CRUD 完整运行</td></tr>
+      <tr><td>🤖 LLM 技能网关</td><td>AI 文本/脚本生成</td><td>智谱 glm-4.7-flash（免费）</td><td><span class="code-val">已验证回包 49 字正常</span></td></tr>
+      <tr><td>🔐 Auth 认证 / SSO</td><td>JWT + 管理系统登录互通</td><td>ConnectedAuthAdapter.verifyMsToken</td><td>SSO 验签可用（不依赖服务账号）</td></tr>
+      <tr><td>🎭 演示模式</td><td>免密演示登录 + 演示种子</td><td>Admin 帐号复用 + DemoService</td><td>init 清除已验证</td></tr>
+      <tr><td>📋 P 合规预检</td><td>违禁词库文本检测</td><td>本地 MySQL 词库</td><td>block/pass 完整流程</td></tr>
+      <tr><td>📱 B 账号矩阵</td><td>多平台账号管理</td><td>本地 CRUD</td><td>平台账号手动录入</td></tr>
+      <tr><td>🔍 C 情报采集</td><td>数据聚合/分析</td><td>本地查询</td><td>无外部 API 依赖</td></tr>
+      <tr><td>🧠 D 人性分析</td><td>7 人性 × 6 情绪</td><td>本地分析引擎</td><td>字典常量完整</td></tr>
+      <tr><td>💡 E 选题管理</td><td>选题生命周期 + 状态机</td><td>本地 CRUD</td><td>不依赖 LLM</td></tr>
+      <tr><td>📝 F 脚本管理</td><td>AI 脚本生成 + CRUD</td><td>Skill Gateway(LLM) + 本地持久化</td><td>LLM 生成已验证</td></tr>
+      <tr><td>📊 L 数据看板</td><td>多维度报表聚合</td><td>本地 SQL 聚合</td><td>5 接口聚合正常</td></tr>
+      <tr><td>📢 J 付费投放</td><td>投放计划 CRUD</td><td>本地 CRUD</td><td>无外部 API 依赖</td></tr>
+      <tr><td>📚 AA 知识库/帮助</td><td>FAQ + 操作手册</td><td>本地 CRUD</td><td>无外部 API 依赖</td></tr>
+      <tr><td>🎬 K 直播管理</td><td>直播间/推流管理</td><td>本地 CRUD + rtmp 配置</td><td>推流逻辑为本地操作</td></tr>
+      <tr><td>📝 N 审计日志</td><td>操作记录写入</td><td>AuditService → DB</td><td>飞书 alert webhook 可选</td></tr>
+      <tr><td>⚙️ Z 技能中心</td><td>技能市场/绑定/启用</td><td>本地管理</td><td>全局 skill 管理</td></tr>
+      <tr><td>🛡️ M 决策引擎</td><td>决策规则 CRUD</td><td>本地 CRUD</td><td>看板数据后端已通</td></tr>
+      <tr><td>🏷️ O 标签/分类</td><td>统一标签体系</td><td>本地 CRUD</td><td>跨模块复用</td></tr>
+      <tr><td>🔧 V 系统配置</td><td>系统参数管理</td><td>本地 CRUD</td><td>环境变量+DB</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============ 二、部分模拟/有降级（5 项） ============ -->
+<div class="section">
+  <h2>🔶 部分模拟 / 有降级 <span class="badge amber">5 项</span></h2>
+  <table>
+    <thead><tr><th style="width:16%">模块</th><th style="width:22%">当前状态</th><th style="width:26%">降级/模拟行为</th><th style="width:26%">需补齐</th><th style="width:10%">优先级</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>I 发布</strong></td>
+        <td>模拟回执</td>
+        <td class="desc">DouyinClientService 真实 API 已实现，但 <span class="code-key">OPS_DOUYIN_APP_ID/SECRET</span> 为空 →<br>
+        <span class="code-key">extPostId = `pub_${tenant}_${account}_${script}`</span>（模拟回执）</td>
+        <td class="desc">配置抖音开放平台 App ID/Secret</td>
+        <td><span class="priority-tag p0">P0 核心</span></td>
+      </tr>
+      <tr>
+        <td><strong>G 素材中心</strong></td>
+        <td>AI 文本生成可用，文件存本地</td>
+        <td class="desc">
+          ① 文件上传：<span class="code-key">FileStorageService</span> 落本地磁盘 <span class="code-key">./uploads/</span>（非 OSS）<br>
+          ② AI 画面/视频生成经 LLM（返回文本占位），<strong>未对接即梦/可灵</strong> 等 Media Provider<br>
+          ③ 公网 URL 使用 <span class="code-key">localhost:3100/uploads/</span>（非 CDN）
+        </td>
+        <td class="desc">配置 <span class="code-key">OPS_OSS_*</span> 对象存储；集成 Media Provider</td>
+        <td><span class="priority-tag p1">P1 重要</span></td>
+      </tr>
+      <tr>
+        <td><strong>H 智能成片</strong></td>
+        <td>FFmpeg 占位视频</td>
+        <td class="desc">
+          ① FFmpeg 生成<strong>黑场 5s</strong>占位视频（非真正分镜拼装）<br><!-- ② 未对接即梦/可灵 Media Provider  --></td>
+        <td class="desc">实现真实分镜 → 素材拼装 → 转场/字幕/配音管道</td>
+        <td><span class="priority-tag p1">P1 重要</span></td>
+      </tr>
+      <tr>
+        <td><strong>Auth Connected</strong></td>
+        <td>SSO 可用，2 接口为 stub</td>
+        <td class="desc">
+          <span class="code-key">syncTenant()</span> 空实现 → "P3 服务账号接入后实现"<br>
+          <span class="code-key">listAccounts()</span> 空实现 → 返回 <span class="code-val">[]</span>
+        </td>
+        <td class="desc">配置 <span class="code-key">OPS_MS_CLIENT_ID/SECRET</span> 后启用服务账号回调</td>
+        <td><span class="priority-tag p2">P2 增强</span></td>
+      </tr>
+      <tr>
+        <td><strong>N 飞书告警</strong></td>
+        <td>Webhook 未配置</td>
+        <td class="desc"><span class="code-key">FEISHU_WEBHOOK_URL</span> / <span class="code-key">FEISHU_ALERT_WEBHOOK_URL</span> 均为空</td>
+        <td class="desc">配置飞书机器人 Webhook 地址</td>
+        <td><span class="priority-tag p2">P2 可选</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============ 三、Standalone 未接入管理系统（4 项） ============ -->
+<div class="section">
+  <h2>❌ Standalone 模式 · 未接入管理系统 <span class="badge red">4 项</span></h2>
+  <p style="font-size:13px;color:var(--text-sec);margin-bottom:12px;">
+    当前 <span class="code-key">OPS_INTEGRATION_MODE=standalone</span>，
+    以下模块使用 <span class="code-key">NotImplementedAdapter</span>（抛 <span class="code-val">NOT_IMPLEMENTED</span>）。
+    切换到 <span class="code-key">connected</span> 需同时配置 <span class="code-key">OPS_MS_CLIENT_ID</span> +
+    <span class="code-key">OPS_MS_CLIENT_SECRET</span>。
+    对应的 <strong>真实适配器代码已全部编写完成</strong>（ConnectedProductAdapter / ConnectedOrderAdapter / ConnectedCommissionAdapter），
+    只需配置凭证即可启用。
+  </p>
+  <table>
+    <thead><tr><th style="width:16%">模块</th><th style="width:22%">Standalone 行为</th><th style="width:26%">Connected 适配器</th><th style="width:26%">管理系统接口</th><th style="width:10%">优先级</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>R 商品</strong></td>
+        <td class="desc">本地 NGProductAdapter（手动录入）</td>
+        <td><span class="code-key">ConnectedProductAdapter</span>（已写完）</td>
+        <td class="desc"><span class="code-val">GET /admin/products/:id</span><br><span class="code-val">GET /admin/products</span><br>bindCart 永久 NOT_IMPLEMENTED</td>
+        <td><span class="priority-tag p1">P1</span></td>
+      </tr>
+      <tr>
+        <td><strong>T 选品</strong></td>
+        <td class="desc">本地商品库（无管理系统商品）</td>
+        <td>复用 <span class="code-key">ConnectedProductAdapter</span></td>
+        <td class="desc">同上，读管理系统商品真源<br>bindCart（挂车）为抖音端能力，非管理系统范畴</td>
+        <td><span class="priority-tag p1">P1</span></td>
+      </tr>
+      <tr>
+        <td><strong>Y 订单/物流</strong></td>
+        <td class="desc">NotImplementedAdapter → 抛错</td>
+        <td><span class="code-key">ConnectedOrderAdapter</span>（已写完）</td>
+        <td class="desc"><span class="code-val">GET /admin/orders</span><br><span class="code-val">GET /admin/orders/:id</span><br><span class="code-val">POST /admin/orders</span>（推单）<br><span class="code-val">GET /admin/inventory-balance</span></td>
+        <td><span class="priority-tag p0">P0 核心</span></td>
+      </tr>
+      <tr>
+        <td><strong>W 佣金/财务</strong></td>
+        <td class="desc">本地分账 MVP</td>
+        <td><span class="code-key">ConnectedCommissionAdapter</span>（已写完）</td>
+        <td class="desc"><span class="code-val">GET /admin/commission/records</span><br><span class="code-val">GET /admin/finance/dashboard</span><br><span class="code-val">POST /admin/commission/settle</span></td>
+        <td><span class="priority-tag p1">P1</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============ 四、缺失配置清单 ============ -->
+<div class="section">
+  <h2>🔧 缺失外部服务配置清单</h2>
+  <table>
+    <thead><tr><th style="width:24%">环境变量</th><th style="width:20%">当前值</th><th style="width:28%">作用</th><th style="width:28%">获取方式</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="code-key">OPS_INTEGRATION_MODE</span></td>
+        <td><span class="code-val">standalone</span></td>
+        <td class="desc">切换为 <span class="code-key">connected</span> 启用管理系统适配层</td>
+        <td class="desc">配置服务账号凭证后改为 connected</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_MS_CLIENT_ID</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">管理系统服务账号 Client ID（§5.4 统一管理后台方案）</td>
+        <td class="desc">向管理系统管理员申请服务账号</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_MS_CLIENT_SECRET</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">管理系统服务账号 Client Secret</td>
+        <td class="desc">同上</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_DOUYIN_APP_ID</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">抖音开放平台应用 ID（发布视频用）</td>
+        <td class="desc"><a href="https://developer.open-douyin.com">抖音开放平台</a> → 创建应用</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_DOUYIN_APP_SECRET</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">抖音开放平台应用 Secret</td>
+        <td class="desc">同上</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_OSS_ENDPOINT</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">对象存储 Endpoint（S3 兼容）</td>
+        <td class="desc">腾讯云 COS / 阿里云 OSS / MinIO</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_OSS_BUCKET</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">对象存储 Bucket 名称</td>
+        <td class="desc">同上</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_OSS_ACCESS_KEY</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">对象存储 Access Key</td>
+        <td class="desc">同上</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">OPS_OSS_SECRET_KEY</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">对象存储 Secret Key</td>
+        <td class="desc">同上</td>
+      </tr>
+      <tr>
+        <td><span class="code-key">FEISHU_WEBHOOK_URL</span></td>
+        <td class="code-val" style="color:var(--red)">（空）</td>
+        <td class="desc">飞书机器人 Webhook（系统告警通知）</td>
+        <td class="desc">飞书群 → 群机器人 → 添加自定义机器人</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============ 五、接入顺序建议 ============ -->
+<div class="section">
+  <h2>📋 推荐接入顺序</h2>
+  <ol class="action-list">
+    <li>
+      <span class="priority-tag p0">P0 核心路径</span>
+      <div>
+        <strong>① 抖音发布真实接入</strong>：配置 <span class="code-key">OPS_DOUYIN_APP_ID/SECRET</span> →
+        发布链路从模拟回执变为真实上传+发布（DouyinClientService 代码已就绪）<br>
+        <span class="desc">影响：I 发布模块 → B 账号矩阵 → L 数据看板</span>
+      </div>
+    </li>
+    <li>
+      <span class="priority-tag p0">P0 核心路径</span>
+      <div>
+        <strong>② 管理系统对接（订单/商品/佣金）</strong>：配置 <span class="code-key">OPS_MS_CLIENT_ID/SECRET</span> +
+        设 <span class="code-key">OPS_INTEGRATION_MODE=connected</span> →
+        Y/R/T/W 四个模块全部切换到真实适配器<br>
+        <span class="desc">影响：Y 订单 → R 商品 → T 选品 → W 佣金 → M 决策看板</span>
+      </div>
+    </li>
+    <li>
+      <span class="priority-tag p1">P1 重要</span>
+      <div>
+        <strong>③ 对象存储接入</strong>：配置 <span class="code-key">OPS_OSS_*</span> →
+        素材/视频文件存储从本地磁盘迁移到云存储（支持 CDN 分发）<br>
+        <span class="desc">影响：G 素材中心 → H 智能成片 → I 发布上传</span>
+      </div>
+    </li>
+    <li>
+      <span class="priority-tag p1">P1 重要</span>
+      <div>
+        <strong>④ 智能成片管道升级</strong>：从黑场占位 → 真实分镜拼装（场景切换/字幕/配音/多比例）<br>
+        <span class="desc">影响：H 智能成片 → F 脚本联动 → G 素材联动 → I 发布</span>
+      </div>
+    </li>
+    <li>
+      <span class="priority-tag p2">P2 增强</span>
+      <div>
+        <strong>⑤ 管理系统租户同步</strong>：配置服务账号后，Auth <span class="code-key">syncTenant/listAccounts</span> 从 stub 变为真实回调<br>
+        <span class="desc">影响：Auth 认证 → 多租户管理</span>
+      </div>
+    </li>
+    <li>
+      <span class="priority-tag p2">P2 可选</span>
+      <div>
+        <strong>⑥ 飞书告警通知</strong>：配置 <span class="code-key">FEISHU_WEBHOOK_URL</span>（非阻塞，当前本地日志完整）<br>
+        <span class="desc">影响：N 审计告警</span>
+      </div>
+    </li>
+    <li>
+      <span class="priority-tag p2">P2 增强</span>
+      <div>
+        <strong>⑦ Media Provider 集成（即梦/可灵）</strong>：对接真实 AI 视频/画面生成 API，替代当前 LLM 文本占位<br>
+        <span class="desc">影响：G 素材中心 → H 智能成片</span>
+      </div>
+    </li>
+  </ol>
+</div>
+
+<!-- ============ 六、代码质量说明 ============ -->
+<div class="section">
+  <h2>🛡️ 代码质量说明</h2>
+  <p style="font-size:13px;color:var(--text-sec);margin-bottom:12px;">
+    检查组确保所有"模拟/降级"路径都有<strong>明确的降级策略和可切换开关</strong>，不会在无感知情况下静默失败。
+  </p>
+  <table>
+    <thead><tr><th>降级点</th><th>降级策略</th><th>开关</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>抖音发布</td>
+        <td class="desc">DouyinClientService 配置为空 → 返回模拟 extPostId（明确注释"stage-1 模拟回执"）</td>
+        <td><span class="code-key">OPS_DOUYIN_APP_ID</span></td>
+      </tr>
+      <tr>
+        <td>管理系统适配</td>
+        <td class="desc">NotImplementedAdapter → 调用抛 NOT_IMPLEMENTED（硬错误，不静默）</td>
+        <td><span class="code-key">OPS_INTEGRATION_MODE</span></td>
+      </tr>
+      <tr>
+        <td>文件存储</td>
+        <td class="desc">OSS 未配 → 本地磁盘落盘 ./uploads/（明确 fallback 路径）</td>
+        <td><span class="code-key">OPS_OSS_ENDPOINT</span></td>
+      </tr>
+      <tr>
+        <td>FFmpeg</td>
+        <td class="desc">无真实素材 → 黑场 5s 占位 + 标注 composed:ok（best-effort）</td>
+        <td><span class="code-key">OPS_FFMPEG_PATH</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p style="text-align:center;color:var(--text-sec);font-size:12px;margin-top:24px;">
+  智享全链运营系统 · 接入真实环境检查报告 · 生成于 2026-08-10
+</p>
+
+</div>
+</body>
+</html>

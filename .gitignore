@@ -1,0 +1,34 @@
+# ===== 环境与密钥（切勿提交） =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== 依赖与构建产物 =====
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# ===== 运行时数据 =====
+logs/
+uploads/
+*.log
+*.pid
+.history/
+
+# ===== 第三方工具与数据库 =====
+tools/
+*.zip
+
+# ===== IDE / 编辑器 =====
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===== AI 工具缓存 =====
+.codebuddy/
+.zxology/

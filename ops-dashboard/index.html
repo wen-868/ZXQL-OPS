@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智享全链运营 · 经营决策看板</title>
+  <script src="./vendor/plotly.min.js"></script>
+  <script>
+    // plotly 本地加载失败则降级到 CDN
+    window.addEventListener('error', function (e) {
+      if (e.target && e.target.tagName === 'SCRIPT' && e.target.src.indexOf('vendor/plotly') >= 0 && !window.__plotlyFallback) {
+        window.__plotlyFallback = true;
+        var s = document.createElement('script');
+        s.src = 'https://cdn.plot.ly/plotly-2.35.2.min.js';
+        s.onload = function () { window.__plotlyReady && window.__plotlyReady(); };
+        document.head.appendChild(s);
+      }
+    }, true);
+  </script>
+  <style>
+    :root {
+      --bg: #0d111c;
+      --panel: #161d2e;
+      --panel-2: #1d2638;
+      --border: #2a3550;
+      --text: #e6ecf7;
+      --muted: #8a97b1;
+      --accent: #5b8def;
+      --accent-2: #f5a623;
+      --good: #2ecc71;
+      --bad: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(1200px 600px at 80% -10%, #1b2540 0%, var(--bg) 60%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      padding: 18px 26px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13,17,28,.7);
+      backdrop-filter: blur(8px);
+      position: sticky; top: 0; z-index: 10;
+    }
+    header h1 { font-size: 18px; margin: 0; letter-spacing: .5px; }
+    header h1 .dot { color: var(--accent); }
+    .tag { font-size: 11px; font-weight: 600; color: var(--accent-2); border: 1px solid rgba(245,166,35,.4); border-radius: 999px; padding: 2px 9px; margin-left: 8px; vertical-align: middle; }
+    .grid.vx { margin-top: 22px; }
+    .spacer { flex: 1; }
+    .ctrl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .ctrl input {
+      width: 70px; padding: 6px 8px; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    }
+    button {
+      background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+      padding: 7px 16px; font-size: 13px; cursor: pointer; transition: .15s;
+    }
+    button:hover { filter: brightness(1.1); }
+    button.ghost { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+    #status { font-size: 12px; color: var(--muted); }
+    #status.err { color: var(--bad); }
+    #status.ok { color: var(--good); }
+    main { padding: 22px 26px 60px; max-width: 1500px; margin: 0 auto; }
+    .grid { display: grid; gap: 18px; }
+    .cards { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 18px; }
+    .card {
+      background: linear-gradient(160deg, var(--panel-2), var(--panel));
+      border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px;
+    }
+    .card .label { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .card .value { font-size: 26px; font-weight: 650; letter-spacing: .5px; }
+    .card .value small { font-size: 14px; color: var(--muted); font-weight: 400; }
+    .card.accent .value { color: var(--accent); }
+    .card.gold .value { color: var(--accent-2); }
+    .card.good .value { color: var(--good); }
+    .charts { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 980px) { .charts { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 16px 4px;
+    }
+    .panel h2 { font-size: 14px; margin: 0 0 4px; font-weight: 600; }
+    .panel .sub { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .chart { width: 100%; height: 300px; }
+    .empty { height: 300px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    td.r, th.r { text-align: right; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span class="dot">●</span> 智享全链运营 · 经营决策看板</h1>
+    <div class="spacer"></div>
+    <div class="ctrl">
+      <label>租户 tenantId</label>
+      <input id="tenant" value="1" />
+    </div>
+    <button id="refresh" class="ghost">刷新</button>
+    <button id="auto">自动刷新：关</button>
+    <span id="status"></span>
+  </header>
+
+  <main>
+    <!-- 核心指标卡 -->
+    <section class="grid cards" id="cards"></section>
+
+    <!-- 图表区 -->
+    <section class="grid charts">
+      <div class="panel">
+        <h2>近 7 日播放 / 互动趋势</h2>
+        <div class="sub">来源：/api/ops/dashboard/overview</div>
+        <div id="trend" class="chart"></div>
+      </div>
+      <div class="panel">
+        <h2>全链路漏斗</h2>
+        <div class="sub">内容生产率 → 分发覆盖 → 触达 → 互动 → 转化 → 收益</div>
+        <div id="funnel" class="chart"></div>
+      </div>
+      <div class="panel">
+        <h2>账号对比</h2>
+        <div class="sub">粉丝量 / 发布量（来源：/api/ops/dashboard/account-compare）</div>
+        <div id="accounts" class="chart"></div>
+      </div>
+      <div class="panel">
+        <h2>选题效能榜</h2>
+        <div class="sub">人性钩子 × 情绪 分组（来源：/api/ops/dashboard/topic-efficiency）</div>
+        <div id="topics"></div>
+      </div>
+      <div class="panel" style="grid-column: 1 / -1;">
+        <h2>人性钩子分析（7 人性 × 6 情绪）</h2>
+        <div class="sub">平均播放 / 互动率 / 转化率（来源：/api/ops/dashboard/human-hook）</div>
+        <div id="humanhook" class="chart" style="height:360px;"></div>
+      </div>
+    </section>
+
+    <!-- 第三阶段：达人/商单 + 内容出海 -->
+    <section class="grid vx" id="vx">
+      <div class="panel" style="grid-column: 1 / -1;">
+        <h2>达人 / 商单概览 <span class="tag">阶段三 · V</span></h2>
+        <div class="sub">来源：/api/ops/talent/summary · /api/ops/talent/brand-orders</div>
+        <div class="grid cards" id="talentCards"></div>
+        <div id="brandOrders" style="margin-top:14px;"></div>
+      </div>
+      <div class="panel" style="grid-column: 1 / -1;">
+        <h2>内容出海概览 <span class="tag">阶段三 · X</span></h2>
+        <div class="sub">来源：/api/ops/overseas/summary · /api/ops/overseas/videos</div>
+        <div class="grid cards" id="overseasCards"></div>
+        <div id="overseasVideos" style="margin-top:14px;"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API = '/api/ops';
+    const $ = (id) => document.getElementById(id);
+    const tenant = () => $('tenant').value.trim() || '1';
+
+    function setStatus(msg, cls) {
+      const el = $('status');
+      el.textContent = msg;
+      el.className = cls || '';
+    }
+
+    async function api(path) {
+      const res = await fetch(API + path, { headers: { 'x-tenant-id': tenant() } });
+      const json = await res.json();
+      if (!res.ok || json.code !== '0') {
+        throw new Error(json.msg || ('HTTP ' + res.status));
+      }
+      return json.data;
+    }
+
+    function fmt(n) {
+      if (n === null || n === undefined || isNaN(n)) return '—';
+      if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + ' 亿';
+      if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(2) + ' 万';
+      return Number(n).toLocaleString('zh-CN');
+    }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function pct(n) { return (n == null ? '—' : (n * 100).toFixed(2) + '%'); }
+
+    // 通用布局
+    const baseLayout = {
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: '#e6ecf7', size: 12 },
+      margin: { l: 50, r: 18, t: 10, b: 36 },
+      xaxis: { gridcolor: 'rgba(255,255,255,.06)', zerolinecolor: 'rgba(255,255,255,.1)' },
+      yaxis: { gridcolor: 'rgba(255,255,255,.06)', zerolinecolor: 'rgba(255,255,255,.1)' },
+      legend: { orientation: 'h', y: -0.18 },
+    };
+    const CFG = { displayModeBar: false, responsive: true };
+    const PALETTE = ['#5b8def', '#f5a623', '#2ecc71', '#e056fd', '#ff6b6b', '#1abc9c'];
+
+    function emptyState(id, text) {
+      const el = $(id);
+      el.innerHTML = '<div class="empty">' + (text || '暂无数据') + '</div>';
+    }
+
+    // —— 指标卡 ——
+    function renderCards(cards) {
+      const items = [
+        { k: 'totalPlay', label: '总播放量', cls: 'accent' },
+        { k: 'totalInteract', label: '总互动量', cls: '' },
+        { k: 'totalFanInc', label: '总涨粉', cls: 'good' },
+        { k: 'totalCommission', label: '总佣金/收益', cls: 'gold', money: true },
+        { k: 'videoCount', label: '成片数', cls: '' },
+        { k: 'completeRate', label: '完播率', cls: '', rate: true },
+        { k: 'interactRate', label: '互动率', cls: '', rate: true },
+        { k: 'fanRate', label: '涨粉率', cls: '', rate: true },
+        { k: 'conversionRate', label: '转化率', cls: '', rate: true },
+        { k: 'avgCompleteRate', label: '平均完播', cls: '', rate: true },
+      ];
+      $('cards').innerHTML = items.map((it) => {
+        const v = cards ? cards[it.k] : 0;
+        const shown = it.money ? '¥' + fmt(v) : it.rate ? pct(v) : fmt(v);
+        return `<div class="card ${it.cls}"><div class="label">${it.label}</div><div class="value">${shown}</div></div>`;
+      }).join('');
+    }
+
+    // —— 趋势 ——
+    function renderTrend(trend) {
+      if (!trend || !trend.length) { emptyState('trend'); return; }
+      const x = trend.map((t) => t.date.slice(5));
+      Plotly.newPlot('trend', [
+        { x, y: trend.map((t) => t.play), name: '播放', type: 'scatter', mode: 'lines+markers', line: { color: PALETTE[0], width: 2 }, fill: 'tozeroy', fillcolor: 'rgba(91,141,239,.12)' },
+        { x, y: trend.map((t) => t.interact), name: '互动', type: 'scatter', mode: 'lines+markers', line: { color: PALETTE[1], width: 2 } },
+      ], { ...baseLayout, yaxis: { ...baseLayout.yaxis, title: '' } }, CFG);
+    }
+
+    // —— 漏斗 ——
+    function renderFunnel(view) {
+      const stages = view && view.stages ? view.stages : [];
+      if (!stages.length) { emptyState('funnel'); return; }
+      const max = Math.max(...stages.map((s) => s.value), 1);
+      const y = stages.map((s) => s.name).reverse();
+      const x = stages.map((s) => s.value).reverse();
+      Plotly.newPlot('funnel', [{
+        type: 'funnel', y, x,
+        textinfo: 'value+percent initial',
+        marker: { color: ['#5b8def', '#4a7fd6', '#f5a623', '#e056fd', '#2ecc71', '#1abc9c'].reverse() },
+        connector: { line: { color: 'rgba(255,255,255,.2)' } },
+      }], { ...baseLayout, margin: { l: 90, r: 18, t: 10, b: 20 } }, CFG);
+    }
+
+    // —— 账号对比 ——
+    function renderAccounts(view) {
+      const acc = view && view.accounts ? view.accounts : [];
+      if (!acc.length) { emptyState('accounts'); return; }
+      const names = acc.map((a) => a.nickname || ('账号' + a.accountId));
+      Plotly.newPlot('accounts', [
+        { x: names, y: acc.map((a) => a.fansCount), name: '粉丝量', type: 'bar', marker: { color: PALETTE[0] } },
+        { x: names, y: acc.map((a) => a.publishCount), name: '发布量', type: 'bar', marker: { color: PALETTE[2] } },
+      ], { ...baseLayout, barmode: 'group', xaxis: { ...baseLayout.xaxis, tickangle: -20 } }, CFG);
+    }
+
+    // —— 选题效能榜（表格） ——
+    function renderTopics(view) {
+      const items = view && view.items ? view.items : [];
+      const el = $('topics');
+      if (!items.length) { emptyState('topics'); return; }
+      const rows = items.slice(0, 12).map((it) => `
+        <tr>
+          <td><span class="badge">${it.driver}</span></td>
+          <td><span class="badge">${it.emotion}</span></td>
+          <td class="r">${it.topicCount}</td>
+          <td class="r">${it.avgScore}</td>
+          <td class="r">${fmt(it.avgPlay)}</td>
+          <td class="r">${pct(it.avgConversion)}</td>
+        </tr>`).join('');
+      el.innerHTML = `<table>
+        <thead><tr><th>人性</th><th>情绪</th><th class="r">选题数</th><th class="r">均分</th><th class="r">均播放</th><th class="r">均转化</th></tr></thead>
+        <tbody>${rows}</tbody></table>`;
+    }
+
+    // —— 人性钩子热力图 ——
+    function renderHumanHook(view) {
+      const items = view && view.items ? view.items : [];
+      const el = $('humanhook');
+      if (!items.length) { emptyState('humanhook'); return; }
+      const drivers = [...new Set(items.map((i) => i.driver))];
+      const emotions = [...new Set(items.map((i) => i.emotion))];
+      const z = [], text = [];
+      emotions.forEach((em) => {
+        const row = [], trow = [];
+        drivers.forEach((dr) => {
+          const it = items.find((x) => x.driver === dr && x.emotion === em);
+          const v = it ? it.avgPlay : 0;
+          row.push(v);
+          trow.push(it ? `播放 ${fmt(it.avgPlay)} / 互率 ${pct(it.avgInteractRate)} / 转化 ${pct(it.avgConversion)}` : '');
+        });
+        z.push(row); text.push(trow);
+      });
+      Plotly.newPlot('humanhook', [{
+        type: 'heatmap', z, x: drivers, y: emotions, text,
+        hovertemplate: '%{y} · %{x}<br>%{text}<extra></extra>',
+        colorscale: 'Blues', colorbar: { title: '均播放' },
+      }], { ...baseLayout, margin: { l: 70, r: 18, t: 10, b: 50 }, xaxis: { ...baseLayout.xaxis, side: 'top' } }, CFG);
+    }
+
+    function renderTalentSummary(d) {
+      const items = [
+        { k: 'talentCount', label: '达人总数', cls: 'accent' },
+        { k: 'activeTalentCount', label: '活跃达人', cls: 'good' },
+        { k: 'orderCount', label: '商单总数', cls: '' },
+        { k: 'settledCount', label: '已分账', cls: 'gold' },
+        { k: 'totalAmount', label: '商单总额', cls: '', money: true },
+        { k: 'settledAmount', label: '已分账金额', cls: '', money: true },
+      ];
+      $('talentCards').innerHTML = items.map((it) => {
+        const v = d ? d[it.k] : 0;
+        const shown = it.money ? '¥' + fmt(v) : fmt(v);
+        return `<div class="card ${it.cls}"><div class="label">${it.label}</div><div class="value">${shown}</div></div>`;
+      }).join('');
+    }
+    function renderBrandOrders(list) {
+      const el = $('brandOrders');
+      if (!list || !list.length) { emptyState('brandOrders', '暂无商单数据'); return; }
+      const rows = list.slice(0, 12).map((o) => `<tr>
+        <td>${esc(o.advertiser || '-')}</td>
+        <td class="r">¥${fmt(o.amount)}</td>
+        <td><span class="badge">${o.status}</span></td>
+        <td class="r">${o.talentShareRate}%</td>
+        <td>${o.settlementId ? '✅ 已分账' : '—'}</td>
+      </tr>`).join('');
+      el.innerHTML = `<table><thead><tr><th>广告主</th><th class="r">金额</th><th>状态</th><th class="r">达人分成</th><th>分账</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    function renderOverseasSummary(d) {
+      const items = [
+        { k: 'platformCount', label: '出海平台', cls: 'accent' },
+        { k: 'videoCount', label: '出海视频', cls: '' },
+        { k: 'publishedCount', label: '已发布', cls: 'good' },
+        { k: 'taskCount', label: '译制任务', cls: 'gold' },
+      ];
+      $('overseasCards').innerHTML = items.map((it) => {
+        const v = d ? d[it.k] : 0;
+        return `<div class="card ${it.cls}"><div class="label">${it.label}</div><div class="value">${fmt(v)}</div></div>`;
+      }).join('');
+    }
+    function renderOverseasVideos(list) {
+      const el = $('overseasVideos');
+      if (!list || !list.length) { emptyState('overseasVideos', '暂无出海视频（需先有 H 成片）'); return; }
+      const rows = list.slice(0, 12).map((v) => `<tr>
+        <td>${esc(v.title || '-')}</td>
+        <td>${v.targetLang}</td>
+        <td><span class="badge">${v.status}</span></td>
+        <td>${v.url ? '🔗 已发布' : '—'}</td>
+      </tr>`).join('');
+      el.innerHTML = `<table><thead><tr><th>标题</th><th>目标语言</th><th>状态</th><th>外链</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    async function loadAll() {
+      setStatus('加载中…');
+      try {
+        const [overview, funnel, accounts, topics, human, tSum, tOrders, xSum, xVideos] = await Promise.all([
+          api('/dashboard/overview'), api('/dashboard/funnel'),
+          api('/dashboard/account-compare'), api('/dashboard/topic-efficiency'),
+          api('/dashboard/human-hook'),
+          api('/talent/summary'), api('/talent/brand-orders'),
+          api('/overseas/summary'), api('/overseas/videos'),
+        ]);
+        renderCards(overview.cards);
+        renderTrend(overview.trend);
+        renderFunnel(funnel);
+        renderAccounts(accounts);
+        renderTopics(topics);
+        renderHumanHook(human);
+        renderTalentSummary(tSum);
+        renderBrandOrders(tOrders);
+        renderOverseasSummary(xSum);
+        renderOverseasVideos(xVideos);
+        const t = new Date().toLocaleTimeString('zh-CN');
+        setStatus('已更新 ' + t + (funnel && funnel.roi ? ' ｜ ROI ' + funnel.roi : ''), 'ok');
+      } catch (e) {
+        console.error(e);
+        setStatus('加载失败：' + e.message, 'err');
+      }
+    }
+
+    $('refresh').onclick = loadAll;
+    $('tenant').onchange = loadAll;
+    let timer = null;
+    $('auto').onclick = function () {
+      if (timer) { clearInterval(timer); timer = null; this.textContent = '自动刷新：关'; this.classList.add('ghost'); }
+      else { timer = setInterval(loadAll, 15000); this.textContent = '自动刷新：开'; this.classList.remove('ghost'); }
+    };
+
+    window.addEventListener('load', () => {
+      if (window.Plotly) loadAll();
+      else window.addEventListener('plotlyloaded', loadAll);
+    });
+    // CDN fallback 回调
+    const origReady = window.__plotlyReady;
+    window.__plotlyReady = function () { loadAll(); if (origReady) origReady(); };
+    // 本地加载完成信号
+    if (window.Plotly) { /* load 事件仍会触发 */ }
+  </script>
+</body>
+</html>

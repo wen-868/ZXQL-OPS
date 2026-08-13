@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智享全链统一门户</title>
+  <link rel="stylesheet" href="./portal.css" />
+</head>
+<body>
+  <!-- 登录视图 -->
+  <div id="login-view" class="login-view hidden">
+    <div class="login-card">
+      <div class="login-logo">智享全链</div>
+      <h1>统一门户</h1>
+      <p class="login-sub">一个账号进入管理系统与运营系统</p>
+      <form id="login-form" autocomplete="on">
+        <input id="username" type="text" placeholder="管理系统账号" autocomplete="username" required />
+        <input id="password" type="password" placeholder="密码" autocomplete="current-password" required />
+        <div id="login-error" class="login-error hidden"></div>
+        <button type="submit" class="login-btn">登 录</button>
+      </form>
+      <p class="login-hint">登录后按角色自动开通运营系统访问权限</p>
+    </div>
+  </div>
+
+  <!-- 门户视图 -->
+  <div id="app-view" class="app-view hidden">
+    <header class="topbar">
+      <div class="brand">智享全链统一门户</div>
+      <nav class="tabs">
+        <button type="button" data-tab="ms" class="tab">管理系统</button>
+        <button type="button" data-tab="ops" class="tab">运营系统</button>
+      </nav>
+      <div class="user">
+        <span id="user-name" class="user-name"></span>
+        <button type="button" id="logout" class="logout-btn">退出</button>
+      </div>
+    </header>
+    <main class="frame-wrap">
+      <iframe id="frame" title="应用" allow="clipboard-write"></iframe>
+    </main>
+  </div>
+
+  <script src="./portal.js"></script>
+</body>
+</html>

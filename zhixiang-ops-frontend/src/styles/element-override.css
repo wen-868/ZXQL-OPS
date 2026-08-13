@@ -1,0 +1,113 @@
+/* ========================================
+   Element Plus CSS 变量覆写清单
+   来源：DESIGN_SPEC.md §9.2
+   覆写策略：通过 CSS 变量覆写 EL 默认变量
+   ======================================== */
+
+:root {
+  /* ===== 品牌主色覆写（对齐 ZXQL-MS Atlas Blue） ===== */
+  --el-color-primary:          var(--app-brand-500);       /* #3f6fef */
+  --el-color-primary-light-3:  var(--app-brand-300);       /* #8eaff4 */
+  --el-color-primary-light-5:  var(--app-brand-200);       /* #b9cdf9 */
+  --el-color-primary-light-7:  var(--app-brand-100);       /* #dbe5fc */
+  --el-color-primary-light-8:  var(--app-brand-50);        /* #eef3fe */
+  --el-color-primary-light-9:  var(--app-brand-50);        /* #eef3fe */
+  --el-color-primary-dark-2:   var(--app-brand-700);       /* #274bb4 */
+
+  /* ===== 功能色覆写（对齐 ZXQL-MS） ===== */
+  --el-color-success:          var(--app-success-500);     /* #0ea879 */
+  --el-color-success-light-3:  var(--app-success-100);     /* #c8efe3 */
+  --el-color-success-light-5:  var(--app-success-50);      /* #e6f7f1 */
+  --el-color-success-dark-2:   var(--app-success-600);     /* #0c9468 */
+
+  --el-color-warning:          var(--app-warning-500);     /* #d48b3a */
+  --el-color-warning-light-3:  var(--app-warning-100);     /* #f5e3cd */
+  --el-color-warning-light-5:  var(--app-warning-50);      /* #fbf2e6 */
+  --el-color-warning-dark-2:   var(--app-warning-600);     /* #b8762f */
+
+  --el-color-danger:           var(--app-danger-500);      /* #c0392b */
+  --el-color-danger-light-3:   var(--app-danger-100);      /* #f3d4d0 */
+  --el-color-danger-light-5:   var(--app-danger-50);       /* #faeae8 */
+  --el-color-danger-dark-2:    var(--app-danger-600);      /* #a32f23 */
+
+  --el-color-info:             var(--app-info-500);        /* #3f6fef */
+  --el-color-info-light-3:     var(--app-info-100);        /* #dbe5fc */
+  --el-color-info-light-5:     var(--app-info-50);         /* #eef3fe */
+  --el-color-info-dark-2:      var(--app-info-600);        /* #2f5bd6 */
+
+  /* ===== 中性色覆写（对齐 MS 纯灰阶） ===== */
+  --el-text-color-primary:     var(--app-neutral-800);     /* #222222 */
+  --el-text-color-regular:     var(--app-neutral-600);     /* #444444 */
+  --el-text-color-secondary:   var(--app-neutral-500);     /* #666666 */
+  --el-text-color-placeholder: var(--app-neutral-300);     /* #cccccc */
+  --el-text-color-disabled:    var(--app-neutral-300);     /* #cccccc */
+
+  --el-border-color:           var(--app-neutral-200);     /* #e2e2e2 */
+  --el-border-color-light:     var(--app-neutral-100);     /* #f0f0f0 */
+  --el-border-color-lighter:   var(--app-neutral-50);      /* #f8f8f8 */
+  --el-border-color-extra-light: var(--app-neutral-50);    /* #f8f8f8 */
+  --el-border-color-dark:      var(--app-neutral-300);     /* #cccccc */
+
+  --el-fill-color:             var(--app-neutral-100);     /* #f0f0f0 */
+  --el-fill-color-light:       var(--app-neutral-50);      /* #f8f8f8 */
+  --el-fill-color-lighter:     var(--app-neutral-50);      /* #f8f8f8 */
+  --el-fill-color-blank:       #ffffff;
+
+  --el-bg-color:               #ffffff;
+  --el-bg-color-page:          var(--app-neutral-50);      /* #f8f8f8 */
+  --el-bg-color-overlay:       #ffffff;
+
+  /* ===== 圆角覆写 ===== */
+  --el-border-radius-base:     var(--radius-md);           /* 6px */
+  --el-border-radius-small:    var(--radius-sm);           /* 4px */
+  --el-border-radius-round:    var(--radius-full);         /* 9999px */
+
+  /* ===== 字号覆写 ===== */
+  --el-font-size-extra-large:  20px;
+  --el-font-size-large:        16px;
+  --el-font-size-medium:       14px;
+  --el-font-size-base:         14px;
+  --el-font-size-small:        13px;
+  --el-font-size-extra-small:  12px;
+
+  /* ===== 字体覆写 ===== */
+  --el-font-family:            var(--font-sans);
+
+  /* ===== 组件级覆写 ===== */
+
+  /* 按钮高度 */
+  --el-button-size-small:      28px;
+  --el-button-size-default:    34px;
+  --el-button-size-large:      40px;
+
+  /* 输入框高度 */
+  --el-input-height:           34px;
+  --el-input-height-small:     28px;
+  --el-input-height-large:     40px;
+
+  /* 表格 */
+  --el-table-header-bg-color:         var(--app-neutral-50);
+  --el-table-header-text-color:       var(--app-neutral-600);
+  --el-table-header-font-size:        12px;
+  --el-table-row-hover-bg-color:      var(--app-neutral-50);
+  --el-table-border-color:            var(--app-neutral-100);
+  --el-table-header-border-color:     var(--app-neutral-200);
+
+  /* 标签 */
+  --el-tag-font-size:         12px;
+  --el-tag-border-radius:     var(--radius-sm);            /* 4px */
+
+  /* 弹窗 */
+  --el-dialog-border-radius:  var(--radius-xl);            /* 12px */
+
+  /* 抽屉 */
+  --el-drawer-bg-color:       #ffffff;
+
+  /* 菜单（左侧 el-menu 覆写） */
+  --el-menu-bg-color:             var(--sidebar-bg);
+  --el-menu-text-color:           var(--sidebar-text);
+  --el-menu-hover-bg-color:       var(--sidebar-item-hover);
+  --el-menu-active-color:         var(--sidebar-text-active);
+  --el-menu-item-height:          40px;
+  --el-menu-item-font-size:       14px;
+}

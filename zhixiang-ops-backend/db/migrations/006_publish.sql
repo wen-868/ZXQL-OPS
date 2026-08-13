@@ -1,0 +1,27 @@
+-- 006 I 发布管理（阶段1 第六步）
+CREATE TABLE IF NOT EXISTS ops_publish_tasks (
+  id              INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+  tenant_id       VARCHAR(36)     NOT NULL,
+  script_id       INT             NOT NULL,
+  account_id      INT             NOT NULL,
+  platform        VARCHAR(32)     NOT NULL,
+  attribution_id  VARCHAR(64)     NOT NULL,
+  video_id        INT             NULL,
+  scheduled_at    DATETIME        NULL,
+  status          VARCHAR(32)     NOT NULL DEFAULT 'queued',
+  retry_count     INT             NOT NULL DEFAULT 0,
+  error_msg       VARCHAR(512)     NULL,
+  ext_post_id     VARCHAR(128)    NULL COMMENT '平台返回的帖子 id',
+  cart_product_id VARCHAR(64)     NULL COMMENT '挂车商品 id',
+  cart_clicks     INT             NOT NULL DEFAULT 0 COMMENT '挂车点击量',
+  order_conv      INT             NOT NULL DEFAULT 0 COMMENT '挂车转化订单',
+  published_at    DATETIME        NULL,
+  created_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at      DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  deleted_at      DATETIME(6)     NULL,
+  PRIMARY KEY (id),
+  KEY idx_pt_tenant (tenant_id),
+  KEY idx_pt_script (tenant_id, script_id),
+  KEY idx_pt_account (tenant_id, account_id),
+  KEY idx_pt_attribution (tenant_id, attribution_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='发布任务';

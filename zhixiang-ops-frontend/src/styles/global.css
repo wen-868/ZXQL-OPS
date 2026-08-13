@@ -1,0 +1,157 @@
+/* ========================================
+   智享全链运营系统 · 全局样式
+   来源：DESIGN_SPEC.md §6、§7、§8
+   ======================================== */
+
+/* ----- body 默认样式 ----- */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--el-bg-color-page);
+  color: var(--app-neutral-700);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+}
+
+/* ----- 全局滚动条美化 ----- */
+
+/* Webkit 浏览器 (Chrome/Edge/Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--app-neutral-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-neutral-400);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-neutral-300) transparent;
+}
+
+/* ----- 自定义 focus-ring 样式 ----- */
+
+/* 关闭浏览器默认 outline */
+:focus {
+  outline: none;
+}
+
+/* 可聚焦元素的自定义 focus 样式 */
+:focus-visible {
+  outline: 2px solid var(--app-brand-500);
+  outline-offset: 2px;
+}
+
+/* 输入框类组件使用外发光替代 outline */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--app-brand-200);
+  border-color: var(--app-brand-500);
+}
+
+/* 按钮类保持 outline 风格 */
+button:focus-visible {
+  outline: 2px solid var(--app-brand-500);
+  outline-offset: 2px;
+}
+
+/* ----- 全局过渡动画 ----- */
+a,
+button {
+  transition: color var(--duration-fast) var(--ease-out),
+              background-color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-normal) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
+}
+
+/* ----- 通用页面布局辅助类 ----- */
+
+/* 页面容器：居中、限制最大宽度 */
+.page-container {
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding: var(--content-padding);
+}
+
+/* 首页/看板容器：略窄，更聚焦 */
+.page-container-narrow {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--content-padding);
+}
+
+/* 通用卡片 */
+.card {
+  background: var(--app-neutral-0);
+  border: 1px solid var(--app-neutral-100);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  padding: var(--card-padding);
+  margin-bottom: var(--space-md);
+}
+
+.card--flat {
+  box-shadow: none;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--app-neutral-200);
+}
+
+/* 区块标题 */
+.section-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--app-neutral-700);
+  margin: 0 0 var(--space-3);
+}
+
+/* 骨架屏脉冲动画 */
+@keyframes skeleton-pulse {
+  0%   { background-color: var(--app-neutral-100); }
+  50%  { background-color: var(--app-neutral-200); }
+  100% { background-color: var(--app-neutral-100); }
+}
+
+.skeleton {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* 入场动画：从下方淡入 */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up var(--duration-slow) var(--ease-spring) both;
+}
+
+/* 点阵背景图案（登录页使用） */
+.bg-dot-pattern {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

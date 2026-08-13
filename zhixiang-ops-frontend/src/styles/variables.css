@@ -1,0 +1,211 @@
+/* ========================================
+   智享全链运营系统 · CSS 变量完整清单
+   来源：DESIGN_SPEC.md 附录 A
+   ======================================== */
+
+:root {
+  /* ========================================
+     色彩系统
+     ======================================== */
+
+  /* 品牌主色 —— 对齐 ZXQL-MS（Atlas Blue #3F6FEF，去紫调纯蓝） */
+  --app-brand-50:  #eef3fe;
+  --app-brand-100: #dbe5fc;
+  --app-brand-200: #b9cdf9;
+  --app-brand-300: #8eaff4;
+  --app-brand-400: #5a83f2;   /* hover */
+  --app-brand-500: #3f6fef;   /* primary */
+  --app-brand-600: #2f5bd6;   /* active */
+  --app-brand-700: #274bb4;
+  --app-brand-800: #203c91;
+  --app-brand-900: #1a2f73;
+
+  /* 成功 —— 对齐 MS success #0EA879 */
+  --app-success-50:  #e6f7f1;
+  --app-success-100: #c8efe3;
+  --app-success-500: #0ea879;
+  --app-success-600: #0c9468;
+  --app-success-700: #0a7a57;
+
+  /* 警告 —— 对齐 MS warning #D48B3A */
+  --app-warning-50:  #fbf2e6;
+  --app-warning-100: #f5e3cd;
+  --app-warning-500: #d48b3a;
+  --app-warning-600: #b8762f;
+  --app-warning-700: #985f25;
+
+  /* 危险 —— 对齐 MS danger #C0392B */
+  --app-danger-50:  #faeae8;
+  --app-danger-100: #f3d4d0;
+  --app-danger-500: #c0392b;
+  --app-danger-600: #a32f23;
+  --app-danger-700: #85261c;
+
+  /* 信息 —— 同主色（MS 以主色承载 info 语义） */
+  --app-info-50:  #eef3fe;
+  --app-info-100: #dbe5fc;
+  --app-info-500: #3f6fef;
+  --app-info-600: #2f5bd6;
+  --app-info-700: #274bb4;
+
+  /* 中性色 —— 对齐 MS 纯灰阶（无蓝调） #FFF→#111 */
+  --app-neutral-0:   #ffffff;
+  --app-neutral-50:  #f8f8f8;
+  --app-neutral-100: #f0f0f0;
+  --app-neutral-200: #e2e2e2;
+  --app-neutral-300: #cccccc;
+  --app-neutral-400: #999999;
+  --app-neutral-500: #666666;
+  --app-neutral-600: #444444;
+  --app-neutral-700: #333333;
+  --app-neutral-800: #222222;
+  --app-neutral-900: #111111;
+
+  /* 侧边栏 —— 对齐 MS 浅色商业后台（frost-sidebar #FAFAFA，深色文字） */
+  --sidebar-bg:           #fafafa;
+  --sidebar-text:         #444444;   /* secondary */
+  --sidebar-text-hover:   #222222;   /* primary */
+  --sidebar-text-active:  #3f6fef;   /* 主色 */
+  --sidebar-item-hover:   rgba(0,0,0,0.04);
+  --sidebar-item-active:  rgba(63,111,239,0.12); /* 柔和主色背景，仿 ms primary-soft */
+  --sidebar-divider:      rgba(0,0,0,0.06);
+  --sidebar-group-title:  #999999;   /* placeholder */
+  --sidebar-badge:        #3f6fef;
+  /* 窄版居中导航：展开态收窄 + 收起态图标轨道；项内居中胶囊 */
+  --sidebar-collapsed-w:  72px;
+  --sidebar-expanded-w:   208px;
+  --sidebar-icon-size:    18px;
+  --sidebar-item-radius:  var(--radius-md);   /* 选中/悬浮胶囊圆角 */
+  --sidebar-item-inset-x: var(--space-3);     /* 项左右留白，形成居中胶囊 */
+  --sidebar-item-gap:     var(--space-2);     /* 图标与文字间距 */
+  --sidebar-active-bar:   var(--app-brand-500); /* 选中态左侧指示条 */
+
+  /* 数据可视化色板 —— 对齐 MS 高饱和柔和调色板（降荧光，与 chart 色同源） */
+  /* 通用分类色（投流计划类型 / 直播间类型等无序类别，对齐 MS chart 色同源，避免组件内硬编码） */
+  --app-cat-purple:    #9254de;
+  --app-cat-cyan:      #13c2c2;
+  --app-cat-orange:    #fa8c16;
+  --app-cat-green:     #07c160;
+  --app-cat-ink:       #909399;   /* 中性灰（EP 原生 neutral-500 观感） */
+  /* 7 人性：贪/懒/怕/虚荣/窥探/孤独爱/愤怒不公 */
+  --app-driver-greed:    #e67e22;
+  --app-driver-greed-bg: #fdf0e6;
+  --app-driver-lazy:     #8e44ad;
+  --app-driver-lazy-bg:  #f3e9f7;
+  --app-driver-fear:     #c0392b;
+  --app-driver-fear-bg:  #faeae8;
+  --app-driver-vanity:   #e84393;
+  --app-driver-vanity-bg:#fce9f1;
+  --app-driver-peep:     #16a085;
+  --app-driver-peep-bg:  #e6f6f2;
+  --app-driver-lonely:   #5b6fd6;
+  --app-driver-lonely-bg:#eef0fb;
+  --app-driver-anger:    #b03227;
+  --app-driver-anger-bg: #f8e6e3;
+  /* 6 情绪：愤怒/共鸣/好奇/感动/焦虑/爽感 */
+  --app-emotion-anger:    #d64541;
+  --app-emotion-anger-bg: #fae8e7;
+  --app-emotion-resonance:#9b59b6;
+  --app-emotion-resonance-bg:#f4ecf8;
+  --app-emotion-curiosity:#2980b9;
+  --app-emotion-curiosity-bg:#e8f1f9;
+  --app-emotion-touch:    #e072a0;
+  --app-emotion-touch-bg: #fbe9f1;
+  --app-emotion-anxiety:  #e0a12e;
+  --app-emotion-anxiety-bg:#fcf3e0;
+  --app-emotion-thrill:   #27ae60;
+  --app-emotion-thrill-bg:#e8f6ee;
+
+  /* ========================================
+     字体系统
+     ======================================== */
+  --font-sans: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+               "PingFang SC", "Microsoft YaHei", "微软雅黑",
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code",
+               Consolas, "Courier New", monospace;
+  --font-number: "Inter", "SF Pro Text", -apple-system, "PingFang SC",
+                 "Microsoft YaHei", sans-serif;
+
+  /* 字号 */
+  --text-xs:      11px;
+  --text-sm:      12px;
+  --text-base-sm: 13px;
+  --text-base:    14px;
+  --text-md:      16px;
+  --text-lg:      18px;
+  --text-xl:      20px;
+  --text-2xl:     24px;
+  --text-3xl:     28px;
+  --text-4xl:     32px;
+
+  /* ========================================
+     间距系统
+     ======================================== */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* 间距语义别名 */
+  --space-sm:  var(--space-2);
+  --space-md:  var(--space-4);
+  --space-lg:  var(--space-6);
+
+  /* 组件内间距 */
+  --btn-padding-x-sm:  12px;
+  --btn-padding-y-sm:  4px;
+  --btn-padding-x-md:  16px;
+  --btn-padding-y-md:  8px;
+  --btn-padding-x-lg:  20px;
+  --btn-padding-y-lg:  10px;
+  --input-padding-x:   12px;
+  --input-padding-y:   8px;
+  --table-cell-padding-x: 12px;
+  --table-cell-padding-y: 10px;
+  --card-padding:      20px;
+  --card-padding-sm:   16px;
+  --content-padding:   24px;
+  --page-max-width:    1400px;
+  --drawer-width-sm:   480px;
+  --drawer-width-md:   560px;
+  --drawer-width-lg:   720px;
+
+  /* ========================================
+     圆角与阴影
+     ======================================== */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-2xl:  16px;
+  --radius-full: 9999px;
+
+  --shadow-none: none;
+  /* 对齐 MS 柔和分层阴影（带蓝调的 rgba(16,24,40)，非纯黑） */
+  --shadow-sm:   0 1px 2px rgba(16,24,40,0.04);
+  --shadow-md:   0 4px 12px rgba(16,24,40,0.06);
+  --shadow-lg:   0 8px 24px rgba(16,24,40,0.08);
+  --shadow-xl:   0 20px 60px rgba(16,24,40,0.12);
+
+  /* 主色投影（用于悬浮按钮等，基于 Atlas Blue rgb(63,111,239)） */
+  --app-brand-shadow:        rgba(63,111,239,0.35);
+  --app-brand-shadow-strong: rgba(63,111,239,0.5);
+
+  /* ========================================
+     动效
+     ======================================== */
+  --duration-fast:   120ms;
+  --duration-normal: 200ms;
+  --duration-slow:   300ms;
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
