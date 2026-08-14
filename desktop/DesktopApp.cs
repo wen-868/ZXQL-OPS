@@ -11,19 +11,16 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
 // 智享全链运营系统 · 原生桌面客户端（WinForms + WebView2，.NET Framework 4.8）
-// 职责：单实例桌面窗口；自动拉起本地服务栈（MariaDB/Redis/后端/门户）；
-//       状态栏实时显示服务健康；托盘常驻；退出时回滚停止全部服务。
-// 不捆绑浏览器：渲染使用系统自带 WebView2 运行时。
-// 编译（x64）：
-//   csc /nologo /target:winexe /platform:x64 /optimize /out:ZXQLOpsDesktop.exe
-//       /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll
-//       /r:Microsoft.Web.WebView2.Core.dll /r:Microsoft.Web.WebView2.WinForms.dll
-//       DesktopApp.cs
 public class DesktopApp
 {
+    [DllImport("user32.dll")]
+    private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
     [STAThread]
     public static int Main(string[] args)
     {
+        // 高分屏清晰渲染：PerMonitorV2 DPI 感知（清单已声明，此处兜底，须在窗口创建前调用）
+        try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
         bool createdNew;
         using (Mutex m = new Mutex(true, "ZXQL-Ops-Desktop-SingleInstance", out createdNew))
         {

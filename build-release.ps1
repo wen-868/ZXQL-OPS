@@ -39,10 +39,12 @@ if (-not (Test-Path (Join-Path (Join-Path (Join-Path (Join-Path $BACKEND 'dist')
 Write-Host '后端构建完成，迁移 SQL 已随产物' -ForegroundColor Green
 
 Write-Host ''
-Write-Host '=== 2. 构建前端（清空 dist 后重 build）===' -ForegroundColor Cyan
+Write-Host '=== 2. 构建前端（清空 dist 后重 build，默认租户 t_demo）===' -ForegroundColor Cyan
 Push-Location $FRONTEND
 if (Test-Path 'dist') { Remove-Item 'dist' -Recurse -Force }
+$env:VITE_TENANT_ID = 't_demo'
 npm run build 2>&1 | Select-Object -Last 6
+Remove-Item Env:VITE_TENANT_ID -ErrorAction SilentlyContinue
 Pop-Location
 if (-not (Test-Path (Join-Path (Join-Path $FRONTEND 'dist') 'index.html'))) {
   Write-Host '前端构建产物缺失，打包中止' -ForegroundColor Red

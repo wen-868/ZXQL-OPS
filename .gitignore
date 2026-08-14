@@ -33,6 +33,9 @@ zhixiang-ops-release/
 desktop/*.dll
 desktop/logo.ico
 
+# ===== 安装版构建产物 =====
+installer-bundle/
+
 # ===== IDE / 编辑器 =====
 .idea/
 .vscode/

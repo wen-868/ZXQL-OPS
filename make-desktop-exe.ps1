@@ -47,7 +47,8 @@ Write-Host ''
 Write-Host '=== C. 编译安装器（csc.exe）===' -ForegroundColor Cyan
 if (Test-Path $SELF_EXE) { Remove-Item $SELF_EXE -Force }
 $iconArg = '/win32icon:' + (Join-Path $Desktop 'logo.ico')
-$cscOut = & $CSC /nologo /target:winexe /platform:anycpu /optimize $iconArg /out:$SELF_EXE `
+$manArg  = '/win32manifest:' + (Join-Path $Desktop 'app.manifest')
+$cscOut = & $CSC /nologo /target:winexe /platform:anycpu /optimize $iconArg $manArg /out:$SELF_EXE `
   /r:System.dll /r:System.Core.dll /r:System.Windows.Forms.dll /r:Microsoft.CSharp.dll `
   $CS_FILE 2>&1 | Out-String
 if (-not (Test-Path $SELF_EXE)) {
