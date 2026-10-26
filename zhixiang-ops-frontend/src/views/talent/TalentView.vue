@@ -68,12 +68,12 @@
         <el-card shadow="never">
           <el-table :data="orders" v-loading="orderLoading" stripe>
             <el-table-column prop="advertiser" label="广告主" min-width="120" />
-            <el-table-column prop="talentId" label="达人ID" width="90" />
+            <el-table-column prop="talentId" label="达人编号" width="90" />
             <el-table-column prop="amount" label="金额(元)" width="110">
               <template #default="{ row }">{{ row.amount?.toFixed?.(2) }}</template>
             </el-table-column>
             <el-table-column prop="status" label="状态" width="110">
-              <template #default="{ row }"><el-tag :type="orderStatusType(row.status)" size="small">{{ row.status }}</el-tag></template>
+              <template #default="{ row }"><el-tag :type="orderStatusType(row.status)" size="small">{{ orderStatusLabel(row.status) }}</el-tag></template>
             </el-table-column>
             <el-table-column prop="contractNo" label="合同号" min-width="120" />
             <el-table-column prop="talentShareRate" label="达人分成%" width="100" />
@@ -108,8 +108,8 @@
           </el-select>
         </el-form-item>
         <el-form-item label="联系方式"><el-input v-model="talentForm.contact" /></el-form-item>
-        <el-form-item label="达人账号ID"><el-input v-model.number="talentForm.talentAccountId" type="number" /></el-form-item>
-        <el-form-item label="数字人ID"><el-input v-model.number="talentForm.digitalHumanId" type="number" /></el-form-item>
+        <el-form-item label="达人账号编号"><el-input v-model.number="talentForm.talentAccountId" type="number" /></el-form-item>
+        <el-form-item label="数字人编号"><el-input v-model.number="talentForm.digitalHumanId" type="number" /></el-form-item>
         <el-form-item label="机构分成%"><el-input v-model.number="talentForm.agencyShareRate" type="number" /></el-form-item>
         <el-form-item label="达人分成%"><el-input v-model.number="talentForm.talentShareRate" type="number" /></el-form-item>
         <el-form-item label="状态">
@@ -130,16 +130,16 @@
     <el-dialog v-model="orderDialog" title="新建商单" width="560px">
       <el-form :model="orderForm" label-width="100px">
         <el-form-item label="广告主"><el-input v-model="orderForm.advertiser" /></el-form-item>
-        <el-form-item label="达人ID"><el-input v-model.number="orderForm.talentId" type="number" /></el-form-item>
-        <el-form-item label="商品ID"><el-input v-model.number="orderForm.productId" type="number" /></el-form-item>
-        <el-form-item label="账号ID"><el-input v-model.number="orderForm.accountId" type="number" /></el-form-item>
-        <el-form-item label="视频ID"><el-input v-model.number="orderForm.videoId" type="number" /></el-form-item>
+        <el-form-item label="达人编号"><el-input v-model.number="orderForm.talentId" type="number" /></el-form-item>
+        <el-form-item label="商品编号"><el-input v-model.number="orderForm.productId" type="number" /></el-form-item>
+        <el-form-item label="账号编号"><el-input v-model.number="orderForm.accountId" type="number" /></el-form-item>
+        <el-form-item label="视频编号"><el-input v-model.number="orderForm.videoId" type="number" /></el-form-item>
         <el-form-item label="金额(元)"><el-input v-model.number="orderForm.amount" type="number" /></el-form-item>
         <el-form-item label="机构分成%"><el-input v-model.number="orderForm.agencyShareRate" type="number" /></el-form-item>
         <el-form-item label="达人分成%"><el-input v-model.number="orderForm.talentShareRate" type="number" /></el-form-item>
         <el-form-item label="状态">
           <el-select v-model="orderForm.status" style="width:100%">
-            <el-option v-for="s in ORDER_STATUSES" :key="s" :label="s" :value="s" />
+            <el-option v-for="s in ORDER_STATUSES" :key="s" :label="orderStatusLabel(s)" :value="s" />
           </el-select>
         </el-form-item>
         <el-form-item label="合同号"><el-input v-model="orderForm.contractNo" /></el-form-item>
@@ -157,8 +157,8 @@
         <el-form-item label="达人分成%"><el-input v-model.number="settleForm.talentShareRate" type="number" /></el-form-item>
         <el-form-item label="目标状态">
           <el-select v-model="settleForm.toStatus" style="width:100%">
-            <el-option label="completed" value="completed" />
-            <el-option label="settled" value="settled" />
+            <el-option label="已完成" value="completed" />
+            <el-option label="已结算" value="settled" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -194,6 +194,20 @@ const tab = ref<'overview' | 'talent' | 'order'>('overview')
 const ORDER_STATUSES: BrandOrderStatus[] = [
   'pending', 'negotiating', 'signed', 'delivering', 'completed', 'settled', 'cancelled',
 ]
+
+/** 商单状态 → 中文显示（值保持英文状态码，仅展示中文化） */
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  pending: '待接单',
+  negotiating: '洽谈中',
+  signed: '已签约',
+  delivering: '寄样中',
+  completed: '已完成',
+  settled: '已结算',
+  cancelled: '已取消',
+}
+function orderStatusLabel(s: string): string {
+  return ORDER_STATUS_LABELS[s] ?? s
+}
 
 // 概览
 const summary = ref<TalentSummary | null>(null)

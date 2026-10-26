@@ -4,7 +4,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">团队与权限</h1>
-        <p class="page-subtitle">角色(RBAC) 与全局操作审计</p>
+        <p class="page-subtitle">角色与全局操作审计</p>
       </div>
       <el-button type="primary" @click="openCreate">新建角色</el-button>
     </div>
@@ -63,8 +63,8 @@
             <el-form-item label="动作">
               <el-input v-model="auditFilter.action" placeholder="动作" clearable style="width:150px" />
             </el-form-item>
-            <el-form-item label="用户ID">
-              <el-input v-model="auditFilter.userId" placeholder="用户ID" clearable style="width:120px" />
+            <el-form-item label="用户编号">
+              <el-input v-model="auditFilter.userId" placeholder="用户编号" clearable style="width:120px" />
             </el-form-item>
             <el-form-item>
               <div class="filter-actions">
@@ -85,7 +85,7 @@
             <el-table-column prop="action" label="动作" width="130" />
             <el-table-column prop="resource" label="资源" min-width="200" show-overflow-tooltip />
             <el-table-column prop="userId" label="用户" width="90" />
-            <el-table-column prop="traceId" label="traceId" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="traceId" label="追踪标识" min-width="200" show-overflow-tooltip />
             <template #empty>
               <el-empty description="暂无审计日志" />
             </template>
@@ -114,7 +114,7 @@
         </el-form-item>
         <el-form-item label="权限点">
           <el-select v-model="roleForm.permissions" multiple filterable style="width:100%" placeholder="选择权限点">
-            <el-option v-for="p in COMMON_PERMISSIONS" :key="p" :label="p" :value="p" />
+            <el-option v-for="p in COMMON_PERMISSIONS" :key="p" :label="permLabel(p)" :value="p" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -127,7 +127,7 @@
     <!-- 角色分配 -->
     <el-dialog v-model="assignDialog" :title="`分配角色：${assignRoleName}`" width="520px">
       <el-form label-width="80px">
-        <el-form-item label="用户ID">
+        <el-form-item label="用户编号">
           <el-input v-model="assignUserId" type="number" style="width:200px" />
           <el-button style="margin-left:8px" @click="loadUserRoles">查询该用户</el-button>
         </el-form-item>
@@ -170,6 +170,31 @@ import {
 } from '@/api/team'
 
 const tab = ref<'role' | 'audit'>('role')
+
+/** 权限码 → 中文显示（值保持英文权限码，仅展示中文化） */
+const PERM_LABELS: Record<string, string> = {
+  'account:read': '账号-查看',
+  'account:write': '账号-编辑',
+  'intel:read': '情报-查看',
+  'analyze:read': '分析-查看',
+  'topic:read': '选题-查看',
+  'topic:write': '选题-编辑',
+  'script:read': '脚本-查看',
+  'script:write': '脚本-编辑',
+  'publish:read': '发布-查看',
+  'publish:write': '发布-编辑',
+  'workflow:read': '编排-查看',
+  'workflow:write': '编排-编辑',
+  'recycle:read': '回收-查看',
+  'recycle:write': '回收-编辑',
+  'role:read': '权限-查看',
+  'role:write': '权限-编辑',
+  'role:manage': '权限-管理',
+  'audit:read': '审计-查看',
+}
+function permLabel(code: string): string {
+  return PERM_LABELS[code] ?? code
+}
 
 // ---------- 角色 ----------
 const roles = ref<RoleView[]>([])

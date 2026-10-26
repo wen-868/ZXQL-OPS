@@ -8,6 +8,14 @@ export interface DashboardStats {
   publishes: number
   topics: number
   intels: number
+  /** 直播在线（直播间状态 live） */
+  liveOnline: number
+  /** 今日订单（当日创建） */
+  todayOrders: number
+  /** 待审工单（工单 open/pending） */
+  pendingTickets: number
+  /** 待复盘（复盘任务 pending/running） */
+  pendingReviews: number
 }
 
 export function getDashboardStats(): Promise<DashboardStats> {
@@ -86,4 +94,26 @@ export function updateDashboard(id: number, data: { name: string; widgets: unkno
 }
 export function deleteDashboard(id: number): Promise<void> {
   return request.delete(`/ops/dashboard/configs/${id}`).then((r) => r.data)
+}
+
+// 待办聚合项（发布审核 / 高风客诉 / 对账差异 / 待启投流）
+export interface DashboardTodoItem {
+  type: 'publish' | 'cs' | 'reconcile' | 'ad'
+  count: number
+  latest: string
+}
+
+/** 待办聚合（各表未初始化时后端降级 0） */
+export function getDashboardTodos(): Promise<{ list: DashboardTodoItem[] }> {
+  return request.get('/ops/dashboard/todos').then((r) => r.data)
+}
+
+export interface DashboardTrendPoint {
+  date: string
+  orders: number
+}
+
+/** 近 N 日订单趋势（缺失日补 0） */
+export function getDashboardTrend(days = 10): Promise<{ days: DashboardTrendPoint[] }> {
+  return request.get('/ops/dashboard/trend', { params: { days } }).then((r) => r.data)
 }

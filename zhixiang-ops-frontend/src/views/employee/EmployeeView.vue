@@ -4,7 +4,7 @@
       <div>
         <h2 class="page-title">员工管理</h2>
         <p class="page-sub">
-          管理运营系统操作员账号（登录账号），支持启用/禁用与 RBAC 角色绑定。
+          管理运营系统操作员账号（登录账号），支持启用/禁用与角色权限绑定。
         </p>
       </div>
       <el-button type="primary" :icon="Plus" @click="openCreate">新增员工</el-button>
@@ -19,7 +19,7 @@
             <el-tag>{{ roleLabel(row.role) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="RBAC 角色" min-width="200">
+        <el-table-column label="角色权限" min-width="200">
           <template #default="{ row }">
             <el-tag
               v-for="r in row.roles"
@@ -90,7 +90,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="roleDialog" title="RBAC 角色绑定" width="480px">
+    <el-dialog v-model="roleDialog" title="角色权限绑定" width="480px">
       <div v-if="currentEmp">
         <div class="role-current">
           <span class="role-current-label">当前角色：</span>
@@ -194,6 +194,17 @@ function openEdit(row: Employee) {
   editingId.value = row.id
   dialogVisible.value = true
 }
+/** 组装员工保存负载：空 realName/password 转 undefined；status 布尔转 0/1 */
+function buildEmployeePayload(): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    realName: form.realName || undefined,
+    role: form.role,
+    status: form.statusOn ? 1 : 0,
+  }
+  if (form.password) payload.password = form.password
+  return payload
+}
+
 async function handleSave() {
   if (!form.username) {
     ElMessage.warning('请填写账号')
@@ -205,12 +216,7 @@ async function handleSave() {
   }
   saving.value = true
   try {
-    const payload: Record<string, unknown> = {
-      realName: form.realName || undefined,
-      role: form.role,
-      status: form.statusOn ? 1 : 0,
-    }
-    if (form.password) payload.password = form.password
+    const payload = buildEmployeePayload()
     if (editing.value && editingId.value) {
       await updateEmployee(editingId.value, payload as any)
       ElMessage.success('已更新')

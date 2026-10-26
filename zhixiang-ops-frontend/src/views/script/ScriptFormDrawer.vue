@@ -154,7 +154,7 @@ async function handleSubmit() {
         />
       </el-form-item>
       <el-form-item label="模板">
-        <el-input v-model="form.templateId" placeholder="可选，模板 id" aria-label="模板ID" clearable />
+        <el-input v-model="form.templateId" placeholder="可选，模板编号" aria-label="模板编号" clearable />
       </el-form-item>
       <el-form-item label="状态">
         <el-select v-model="form.status" style="width: 100%" aria-label="脚本状态">

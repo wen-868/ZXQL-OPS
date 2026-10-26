@@ -13,6 +13,7 @@ export interface RegisterPayload {
 
 export interface LoginResult {
   token: string
+  csrfToken?: string
   user: {
     id: number
     username: string
@@ -40,4 +41,9 @@ export function demoLogin(): Promise<LoginResult> {
 /** 获取当前用户信息 */
 export function getMe(): Promise<LoginResult['user']> {
   return request.get('/ops/auth/me').then((r) => r.data)
+}
+
+/** 为已登录用户获取/刷新 CSRF 令牌（覆盖门户 SSO 透传登录等无登录响应的场景） */
+export function fetchCsrfToken(): Promise<{ csrfToken: string }> {
+  return request.get('/ops/auth/csrf-token').then((r) => r.data)
 }

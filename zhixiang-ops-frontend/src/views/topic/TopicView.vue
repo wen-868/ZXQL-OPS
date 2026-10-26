@@ -247,11 +247,11 @@ loadTopics()
 </script>
 
 <template>
-  <div class="page-container" aria-label="E 选题引擎">
+  <div class="page-container" aria-label="选题引擎">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div class="page-header-left">
-        <h1 class="page-title">E·选题策划</h1>
+        <h1 class="page-title">选题策划</h1>
         <p class="page-subtitle">基于人性洞察库自动生成选题，支持状态流转、A/B变体与排期，驱动脚本创作</p>
       </div>
     </div>
@@ -297,14 +297,14 @@ loadTopics()
                 aria-label="生成数量"
               />
             </el-form-item>
-            <el-form-item label="洞察分析ID">
+            <el-form-item label="洞察分析编号">
               <el-input
                 v-model="genForm.analysisId"
                 placeholder="可选"
                 type="number"
                 size="default"
                 style="width: 130px"
-                aria-label="洞察分析ID"
+                aria-label="洞察分析编号"
                 clearable
               />
             </el-form-item>
@@ -558,8 +558,8 @@ loadTopics()
             aria-label="排期时间"
           />
         </el-form-item>
-        <el-form-item label="账号ID">
-          <el-input v-model="scheduleForm.accountId" placeholder="可选，目标账号" size="default" aria-label="账号ID" clearable />
+        <el-form-item label="账号编号">
+          <el-input v-model="scheduleForm.accountId" placeholder="可选，目标账号" size="default" aria-label="账号编号" clearable />
         </el-form-item>
       </el-form>
       <template #footer>

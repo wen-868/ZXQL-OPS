@@ -3,15 +3,15 @@
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">Z · 技能中心</h1>
-        <p class="page-subtitle">管理 AI 技能市场、租户启用与 Provider 绑定</p>
+        <h1 class="page-title">技能中心</h1>
+        <p class="page-subtitle">管理 AI 技能市场、租户启用与服务商绑定</p>
       </div>
     </div>
 
     <!-- 功能说明 -->
     <div class="card info-bar">
       <el-icon color="var(--app-brand-500)" :size="16"><MagicStick /></el-icon>
-      <span>技能市场提供系统内置 5 类 AI 能力。启用后 G/H/V/X 等模块可调用对应能力；未启用技能不在网关暴露。</span>
+      <span>技能市场提供系统内置 5 类 AI 能力。启用后相关模块可调用对应能力；未启用技能不在网关暴露。</span>
     </div>
 
     <el-tabs v-model="tab" class="skill-tabs">
@@ -31,7 +31,7 @@
             <el-table-column label="状态" width="90">
               <template #default="{ row }"><el-tag :type="row.enabled?'success':'warning'" size="small">{{ row.enabled?'启用':'停用' }}</el-tag></template>
             </el-table-column>
-            <el-table-column label="Provider" width="120">
+            <el-table-column label="服务商" width="120">
               <template #default="{ row }">{{ providerName(row.providerId) || '-' }}</template>
             </el-table-column>
             <el-table-column label="操作" width="200" fixed="right">
@@ -50,10 +50,10 @@
       <el-tab-pane label="已启用" name="installed">
         <div class="card">
           <el-table :data="installed" v-loading="installedLoading" stripe>
-            <el-table-column prop="skillId" label="技能ID" width="100" />
+            <el-table-column prop="skillId" label="技能编号" width="100" />
             <el-table-column prop="type" label="类型" width="140" />
             <el-table-column prop="name" label="名称" min-width="120" />
-            <el-table-column label="Provider" width="160">
+            <el-table-column label="服务商" width="160">
               <template #default="{ row }">{{ providerName(row.providerId) || '-' }}</template>
             </el-table-column>
           </el-table>
@@ -62,10 +62,10 @@
       </el-tab-pane>
 
       <!-- Provider -->
-      <el-tab-pane label="Provider" name="provider">
+      <el-tab-pane label="服务商" name="provider">
         <div class="card">
           <el-table :data="providers" v-loading="providerLoading" stripe>
-            <el-table-column prop="id" label="ID" width="80" />
+            <el-table-column prop="id" label="编号" width="80" />
             <el-table-column prop="type" label="类型" width="140" />
             <el-table-column prop="name" label="名称" min-width="140" />
             <el-table-column prop="source" label="来源" width="140" />
@@ -86,8 +86,8 @@
     <!-- 启用/改绑 Provider -->
     <el-dialog v-model="bindDialog" :title="`${bindTargetName} · 选择 Provider`" width="480px">
       <el-form label-width="90px">
-        <el-form-item label="Provider">
-          <el-select v-model="bindProviderId" style="width:100%" placeholder="选择 Provider（可不选，用系统默认）">
+        <el-form-item label="服务商">
+          <el-select v-model="bindProviderId" style="width:100%" placeholder="选择服务商（可不选，用系统默认）">
             <el-option v-for="p in providers" :key="p.id" :label="`${p.name}（${p.source}）`" :value="p.id" />
           </el-select>
         </el-form-item>

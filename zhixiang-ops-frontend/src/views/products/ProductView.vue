@@ -227,7 +227,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="product-view" aria-label="R 商品内容中心">
+  <section class="product-view" aria-label="商品内容中心">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
@@ -276,7 +276,7 @@ onMounted(() => {
         v-loading="productsLoading"
         aria-label="商品库列表"
       >
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
         <el-table-column label="来源" width="100">
           <template #default="{ row }">
@@ -329,11 +329,11 @@ onMounted(() => {
             <el-option v-for="opt in sourceTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="外部商品ID">
-          <el-input v-model="ingestForm.externalProductId" placeholder="如平台商品 ID（可选）" aria-label="外部商品ID" />
+        <el-form-item label="外部商品编号">
+          <el-input v-model="ingestForm.externalProductId" placeholder="如平台商品编号（可选）" aria-label="外部商品编号" />
         </el-form-item>
-        <el-form-item label="选品库ID">
-          <el-input v-model.number="ingestForm.selectionProductId" type="number" placeholder="关联选品库商品 id（可选）" aria-label="选品库ID" />
+        <el-form-item label="选品库编号">
+          <el-input v-model.number="ingestForm.selectionProductId" type="number" placeholder="关联选品库商品编号（可选）" aria-label="选品库编号" />
         </el-form-item>
         <el-form-item label="标题">
           <el-input v-model="ingestForm.title" placeholder="商品标题（可选）" aria-label="商品标题" />
@@ -365,8 +365,8 @@ onMounted(() => {
         <el-form-item label="商品">
           <span>{{ stockTarget ? `#${stockTarget.id} ${stockTarget.title}` : '-' }}</span>
         </el-form-item>
-        <el-form-item label="变动 delta" required>
-          <el-input v-model.number="stockForm.delta" type="number" placeholder="正加负减" aria-label="库存变动delta" />
+        <el-form-item label="变动数量" required>
+          <el-input v-model.number="stockForm.delta" type="number" placeholder="正加负减" aria-label="库存变动数量" />
         </el-form-item>
         <el-form-item label="原因">
           <el-input v-model="stockForm.reason" type="textarea" :rows="3" placeholder="调整原因（可选）" aria-label="库存调整原因" />

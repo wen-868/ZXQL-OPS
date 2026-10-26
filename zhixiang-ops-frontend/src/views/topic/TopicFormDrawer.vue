@@ -169,8 +169,8 @@ async function handleSubmit() {
           aria-label="排期时间"
         />
       </el-form-item>
-      <el-form-item label="账号ID">
-        <el-input v-model="form.accountId" placeholder="可选，目标账号" aria-label="账号ID" clearable />
+      <el-form-item label="账号编号">
+        <el-input v-model="form.accountId" placeholder="可选，目标账号" aria-label="账号编号" clearable />
       </el-form-item>
     </el-form>
     <template #footer>

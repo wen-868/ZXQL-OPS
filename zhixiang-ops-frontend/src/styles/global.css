@@ -27,18 +27,18 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--app-neutral-300);
+  background: transparent;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--app-neutral-400);
+  background: #c3c9d2;
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--app-neutral-300) transparent;
+  scrollbar-color: transparent transparent;
 }
 
 /* ----- 自定义 focus-ring 样式 ----- */

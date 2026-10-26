@@ -42,8 +42,57 @@ export interface CompetitorPatch {
   monitorEnabled?: boolean
 }
 
-// 采集任务状态
-export type CollectStatus = 'pending' | 'running' | 'done' | 'failed'
+// 采集任务状态（含人工控制态）
+export type CollectStatus = 'pending' | 'running' | 'paused' | 'cancelled' | 'done' | 'failed'
+
+// 任务生命周期控制动作
+export type CollectControlAction = 'pause' | 'resume' | 'cancel' | 'retry'
+
+// 评论审核状态
+export type ReviewStatus = 'pending' | 'approved' | 'rejected'
+
+// 清洗开关
+export interface CleaningOptions {
+  dedup?: boolean
+  piiStrip?: boolean
+  adFilter?: boolean
+  reviewRequired?: boolean
+}
+
+// 采集源（ops_collect_sources）
+export interface CollectSource {
+  id: number
+  tenantId: string
+  name: string
+  platform: Platform
+  sourceType: 'comment' | 'hot' | 'keyword' | 'url'
+  target: string
+  mode: 'web' | 'local'
+  rateLimit: number
+  cleaning?: CleaningOptions
+  config?: Record<string, unknown>
+  enabled: boolean
+  lastCollectedAt?: string
+  collectCount: number
+  errorMsg?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// 采集源创建入参
+export interface SourcePayload {
+  name: string
+  platform: Platform
+  sourceType: 'comment' | 'hot' | 'keyword' | 'url'
+  target: string
+  mode: 'web' | 'local'
+  rateLimit?: number
+  cleaning?: CleaningOptions
+  config?: Record<string, unknown>
+}
+
+// 采集源更新入参（局部）
+export type SourcePatch = Partial<SourcePayload> & { enabled?: boolean }
 
 // 发起采集返回
 export interface CollectSubmitResult {
@@ -51,12 +100,24 @@ export interface CollectSubmitResult {
   traceId: string
 }
 
-// 采集任务进度
+// 采集任务（列表/详情）
 export interface CollectTask {
   id: number
+  type: string
+  target: string
+  platform: Platform
+  sourceLevel: 'L1' | 'L2'
   status: CollectStatus
   progress: number
   collectedCount: number
+  retryCount: number
+  sourceId?: number
+  cleaning?: CleaningOptions
+  pausedAt?: string
+  errorMsg?: string
+  finishedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 // 发起采集入参
@@ -65,8 +126,9 @@ export interface CollectPayload {
   target: string
   platform: Platform
   sourceLevel: 'L1' | 'L2'
-  scope?: string
+  scope?: string[]
   fieldsCollected?: string[]
+  cleaning?: CleaningOptions
 }
 
 // 已采集评论
@@ -79,13 +141,14 @@ export interface CollectedComment {
   authorId: string
   likes: number
   isClean: boolean
+  reviewStatus: ReviewStatus
   cleanResult: {
     piiRemoved: string[]
     ad: boolean
   }
   contentHash: string
   collectedAt: string
-  taskId: number
+  taskId: string
   createdAt: string
   updatedAt: string
 }
@@ -96,6 +159,7 @@ export interface CommentQuery {
   pageSize?: number
   isClean?: boolean
   platform?: Platform
+  reviewStatus?: ReviewStatus
 }
 
 // 关键词挖掘入参/返回
@@ -117,6 +181,32 @@ export interface HotSnapshot {
   url?: string
   rank?: number
   [key: string]: unknown
+}
+
+// ===== 采集源配置 =====
+// 列表
+export function listSources() {
+  return request.get<CollectSource[]>('/ops/intel/sources').then((r) => r.data)
+}
+// 创建
+export function createSource(payload: SourcePayload) {
+  return request.post<CollectSource>('/ops/intel/sources', payload).then((r) => r.data)
+}
+// 更新
+export function updateSource(id: number, payload: SourcePatch) {
+  return request
+    .patch<CollectSource>(`/ops/intel/sources/${id}`, payload)
+    .then((r) => r.data)
+}
+// 删除（软删）
+export function deleteSource(id: number) {
+  return request.delete<{ id: number }>(`/ops/intel/sources/${id}`).then((r) => r.data)
+}
+// 由采集源发起一次采集（继承源配置：cleaning/rateLimit/target）
+export function collectFromSource(id: number) {
+  return request
+    .post<CollectSubmitResult>(`/ops/intel/sources/${id}/collect`)
+    .then((r) => r.data)
 }
 
 // ===== 竞品库 =====
@@ -152,23 +242,50 @@ export function toggleMonitor(id: number) {
 }
 
 // ===== 采集任务 =====
-// 发起
+// 发起（不经过采集源，直接建任务）
 export function submitCollect(payload: CollectPayload) {
   return request.post<CollectSubmitResult>('/ops/intel/collect', payload).then((r) => r.data)
 }
-// 进度
+// 进度/详情
 export function getCollectTask(id: number) {
   return request.get<CollectTask>(`/ops/intel/collect/${id}`).then((r) => r.data)
 }
+// 任务列表（分页）
+export function listCollectTasks(query: { page?: number; pageSize?: number }) {
+  return request
+    .get<{ list: CollectTask[]; total: number; page: number; pageSize: number }>(
+      '/ops/intel/collect',
+      { params: query },
+    )
+    .then((r) => r.data)
+}
+// 任务生命周期控制：pause / resume / cancel / retry
+export function controlCollectTask(id: number, action: CollectControlAction) {
+  return request
+    .post<CollectTask>(`/ops/intel/collect/${id}/control`, { action })
+    .then((r) => r.data)
+}
 
-// ===== 采集评论 =====
-// 分页列表
+// ===== 采集评论 / 审核 =====
+// 分页列表（可按审核状态过滤）
 export function listCollectedComments(query: CommentQuery) {
   return request
     .get<{ list: CollectedComment[]; total: number; page: number; pageSize: number }>(
       '/ops/intel/collected-comments',
       { params: query },
     )
+    .then((r) => r.data)
+}
+// 单条审核
+export function reviewComment(id: number, status: ReviewStatus) {
+  return request
+    .post<CollectedComment>(`/ops/intel/comments/${id}/review`, { status })
+    .then((r) => r.data)
+}
+// 批量审核
+export function reviewCommentsBatch(ids: number[], status: ReviewStatus) {
+  return request
+    .post<{ updated: number }>('/ops/intel/comments/review-batch', { ids, status })
     .then((r) => r.data)
 }
 

@@ -159,7 +159,7 @@ function openPush(row: LiveRoomView) {
 async function confirmPush() {
   if (!pushTarget.value) return
   if (!pushForm.rtmpUrl.trim()) {
-    ElMessage.warning('rtmpUrl 必填')
+    ElMessage.warning('推流地址必填')
     return
   }
   pushSubmitting.value = true
@@ -312,15 +312,15 @@ async function onGenerateReply() {
 </script>
 
 <template>
-  <section class="live-view" aria-label="K 直播中心">
+  <section class="live-view" aria-label="直播中心">
     <el-alert
       type="info"
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="K 直播中心：直播间开播/推流/监控、数字人、弹幕 AI 应答；状态机约束 created→live→ended；tenantId 由统一拦截器注入。"
+      title="直播中心：直播间开播/推流/监控、数字人、弹幕 AI 应答；状态机约束 创建→开播→结束；租户标识由统一拦截器注入。"
     />
-    <el-tabs v-model="activeTab" type="border-card" aria-label="K 直播功能分区">
+    <el-tabs v-model="activeTab" type="border-card" aria-label="直播功能分区">
       <!-- ===== 1. 直播间 ===== -->
       <el-tab-pane name="rooms">
         <template #label><span aria-label="直播间标签页">直播间</span></template>
@@ -334,7 +334,7 @@ async function onGenerateReply() {
           v-loading="roomsLoading"
           aria-label="直播间列表"
         >
-          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="id" label="编号" width="80" />
           <el-table-column label="类型" width="100">
             <template #default="{ row }">
               <el-tag
@@ -344,7 +344,7 @@ async function onGenerateReply() {
             </template>
           </el-table-column>
           <el-table-column prop="platform" label="平台" width="120" />
-          <el-table-column prop="accountId" label="账号ID" width="90" />
+          <el-table-column prop="accountId" label="账号编号" width="90" />
           <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
@@ -353,11 +353,11 @@ async function onGenerateReply() {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="rtmpUrl" min-width="160" show-overflow-tooltip>
+          <el-table-column label="推流地址" min-width="160" show-overflow-tooltip>
             <template #default="{ row }">{{ (row as LiveRoomView).rtmpUrl ?? '-' }}</template>
           </el-table-column>
-          <el-table-column prop="attributionId" label="attributionId" min-width="160" show-overflow-tooltip />
-          <el-table-column label="商品IDs" min-width="120">
+          <el-table-column prop="attributionId" label="归因标识" min-width="160" show-overflow-tooltip />
+          <el-table-column label="商品编号列表" min-width="120">
             <template #default="{ row }">
               {{ (row as LiveRoomView).productIds.length ? (row as LiveRoomView).productIds.join(', ') : '-' }}
             </template>
@@ -404,9 +404,9 @@ async function onGenerateReply() {
           </div>
           <el-descriptions :column="4" border size="small" v-if="statMap[r.id]">
             <el-descriptions-item label="在线人数">{{ statMap[r.id]!.onlineCount }}</el-descriptions-item>
-            <el-descriptions-item label="GMV">{{ formatAmount(statMap[r.id]!.gmv) }}</el-descriptions-item>
+            <el-descriptions-item label="成交额">{{ formatAmount(statMap[r.id]!.gmv) }}</el-descriptions-item>
             <el-descriptions-item label="时间戳">{{ formatDateTime(statMap[r.id]!.ts) }}</el-descriptions-item>
-            <el-descriptions-item label="attributionId">{{ statMap[r.id]!.attributionId }}</el-descriptions-item>
+            <el-descriptions-item label="归因标识">{{ statMap[r.id]!.attributionId }}</el-descriptions-item>
           </el-descriptions>
           <el-empty v-else :image-size="60" description="暂无数据" />
         </div>
@@ -419,7 +419,7 @@ async function onGenerateReply() {
           <el-button type="primary" @click="openCreateDH" aria-label="创建数字人">创建数字人</el-button>
         </div>
         <el-table :data="digitalHumans" border aria-label="数字人列表">
-          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="id" label="编号" width="80" />
           <el-table-column prop="name" label="名称" min-width="140" />
           <el-table-column label="头像" width="200">
             <template #default="{ row }">
@@ -492,14 +492,14 @@ async function onGenerateReply() {
           <div v-if="danmuResult" class="danmu-result" v-loading="danmuSubmitting">
             <h4 class="sub-title">应答结果</h4>
             <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="直播间ID">{{ danmuResult.roomId }}</el-descriptions-item>
+              <el-descriptions-item label="直播间编号">{{ danmuResult.roomId }}</el-descriptions-item>
               <el-descriptions-item label="状态">
                 <el-tag size="small">{{ aiReplyStatusLabels[danmuResult.status] }}</el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="问题" :span="2">{{ danmuResult.question }}</el-descriptions-item>
               <el-descriptions-item label="回复" :span="2">
                 <span v-if="danmuResult.answer">{{ danmuResult.answer }}</span>
-                <el-tag v-else type="warning" size="small">待人工确认（answer 为 null）</el-tag>
+                <el-tag v-else type="warning" size="small">待人工确认（回答为空）</el-tag>
               </el-descriptions-item>
             </el-descriptions>
           </div>
@@ -516,10 +516,10 @@ async function onGenerateReply() {
           </el-select>
         </el-form-item>
         <el-form-item label="平台" required>
-          <el-input v-model="createForm.platform" placeholder="如 douyin / kuaishou" aria-label="直播平台" />
+          <el-input v-model="createForm.platform" placeholder="如抖音 / 快手平台码" aria-label="直播平台" />
         </el-form-item>
-        <el-form-item label="账号ID" required>
-          <el-input v-model.number="createForm.accountId" type="number" placeholder="需填真实 B 账号 id" aria-label="直播账号ID" />
+        <el-form-item label="账号编号" required>
+          <el-input v-model.number="createForm.accountId" type="number" placeholder="需填真实账号编号" aria-label="直播账号编号" />
         </el-form-item>
         <el-form-item label="标题">
           <el-input v-model="createForm.title" placeholder="直播间标题（可选）" aria-label="直播间标题" />
@@ -531,9 +531,9 @@ async function onGenerateReply() {
             filterable
             allow-create
             default-first-option
-            placeholder="R 商品 id（可空）"
+            placeholder="商品编号（可空）"
             style="width: 100%"
-            aria-label="挂载商品id"
+            aria-label="挂载商品编号"
           />
         </el-form-item>
       </el-form>
@@ -549,8 +549,8 @@ async function onGenerateReply() {
         <el-form-item label="直播间">
           <span>{{ pushTarget ? `#${pushTarget.id}` : '-' }}</span>
         </el-form-item>
-        <el-form-item label="rtmpUrl" required>
-          <el-input v-model="pushForm.rtmpUrl" placeholder="推流地址（必填）" aria-label="推流地址rtmpUrl" />
+        <el-form-item label="推流地址" required>
+          <el-input v-model="pushForm.rtmpUrl" placeholder="推流地址（必填）" aria-label="推流地址" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -568,8 +568,8 @@ async function onGenerateReply() {
         <el-form-item label="在线人数">
           <el-input v-model.number="reportForm.onlineCount" type="number" placeholder="≥0，默认 0" aria-label="在线人数" />
         </el-form-item>
-        <el-form-item label="GMV">
-          <el-input v-model.number="reportForm.gmv" type="number" placeholder="≥0，默认 0" aria-label="GMV" />
+        <el-form-item label="成交额">
+          <el-input v-model.number="reportForm.gmv" type="number" placeholder="≥0，默认 0" aria-label="成交额" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -585,7 +585,7 @@ async function onGenerateReply() {
           <el-input v-model="dhForm.name" placeholder="数字人名称（必填）" aria-label="数字人名称" />
         </el-form-item>
         <el-form-item label="头像">
-          <el-input v-model="dhForm.avatar" placeholder="头像 URL（可选）" aria-label="数字人头像" />
+          <el-input v-model="dhForm.avatar" placeholder="头像地址（可选）" aria-label="数字人头像" />
         </el-form-item>
         <el-form-item label="音色">
           <el-input v-model="dhForm.voice" placeholder="音色（可选）" aria-label="数字人音色" />

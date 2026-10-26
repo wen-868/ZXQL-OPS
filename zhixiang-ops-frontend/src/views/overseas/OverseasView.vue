@@ -3,7 +3,7 @@
     <!-- 页面标题区 -->
     <div class="page-header">
       <div class="page-header-left">
-        <h1 class="page-title">U · 出海管理</h1>
+        <h1 class="page-title">出海管理</h1>
         <p class="page-subtitle">海外平台、出海视频多语言译制、译制任务与出海概览</p>
       </div>
     </div>
@@ -46,12 +46,12 @@
           <el-button type="primary" @click="openCreateVideo">新建视频</el-button>
         </div>
         <el-table :data="videos" v-loading="videoLoading" stripe class="data-table">
-          <el-table-column prop="sourceVideoId" label="源视频ID" width="100" />
-          <el-table-column prop="platformId" label="平台ID" width="90" />
+          <el-table-column prop="sourceVideoId" label="源视频编号" width="100" />
+          <el-table-column prop="platformId" label="平台编号" width="90" />
           <el-table-column prop="title" label="标题" min-width="160" show-overflow-tooltip />
           <el-table-column prop="targetLang" label="目标语言" width="100" />
           <el-table-column prop="status" label="状态" width="110">
-            <template #default="{ row }"><el-tag :type="videoStatusType(row.status)" size="small">{{ row.status }}</el-tag></template>
+            <template #default="{ row }"><el-tag :type="videoStatusType(row.status)" size="small">{{ videoStatusLabel(row.status) }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="url" label="链接" min-width="160" show-overflow-tooltip />
           <el-table-column label="操作" width="100" fixed="right">
@@ -69,11 +69,11 @@
           <el-button type="primary" @click="taskDialog=true">新建译制任务</el-button>
         </div>
         <el-table :data="tasks" v-loading="taskLoading" stripe class="data-table">
-          <el-table-column prop="videoId" label="视频ID" width="90" />
+          <el-table-column prop="videoId" label="视频编号" width="90" />
           <el-table-column prop="sourceLang" label="源语言" width="90" />
           <el-table-column prop="targetLang" label="目标语言" width="100" />
           <el-table-column prop="status" label="状态" width="100">
-            <template #default="{ row }"><el-tag :type="taskStatusType(row.status)" size="small">{{ row.status }}</el-tag></template>
+            <template #default="{ row }"><el-tag :type="taskStatusType(row.status)" size="small">{{ taskStatusLabel(row.status) }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="translatedScript" label="译制脚本" min-width="200" show-overflow-tooltip />
         </el-table>
@@ -100,17 +100,17 @@
     <!-- 视频 新建/编辑 -->
     <el-dialog v-model="videoDialog" :title="videoForm.id?'编辑视频':'新建视频'" width="520px">
       <el-form :model="videoForm" label-width="90px">
-        <el-form-item label="源视频ID" v-if="!videoForm.id"><el-input v-model.number="videoForm.sourceVideoId" type="number" /></el-form-item>
-        <el-form-item label="平台ID" v-if="!videoForm.id"><el-input v-model.number="videoForm.platformId" type="number" /></el-form-item>
+        <el-form-item label="源视频编号" v-if="!videoForm.id"><el-input v-model.number="videoForm.sourceVideoId" type="number" /></el-form-item>
+        <el-form-item label="平台编号" v-if="!videoForm.id"><el-input v-model.number="videoForm.platformId" type="number" /></el-form-item>
         <el-form-item label="标题"><el-input v-model="videoForm.title" /></el-form-item>
         <el-form-item label="目标语言">
           <el-select v-model="videoForm.targetLang" style="width:100%">
-            <el-option v-for="l in LANGS" :key="l" :label="l" :value="l" />
+            <el-option v-for="l in LANGS" :key="l" :label="langLabel(l)" :value="l" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="videoForm.status" style="width:100%">
-            <el-option v-for="s in VIDEO_STATUSES" :key="s" :label="s" :value="s" />
+            <el-option v-for="s in VIDEO_STATUSES" :key="s" :label="videoStatusLabel(s)" :value="s" />
           </el-select>
         </el-form-item>
         <el-form-item label="链接"><el-input v-model="videoForm.url" /></el-form-item>
@@ -124,11 +124,11 @@
     <!-- 译制任务 -->
     <el-dialog v-model="taskDialog" title="新建译制任务" width="520px">
       <el-form :model="taskForm" label-width="90px">
-        <el-form-item label="视频ID"><el-input v-model.number="taskForm.videoId" type="number" /></el-form-item>
+        <el-form-item label="视频编号"><el-input v-model.number="taskForm.videoId" type="number" /></el-form-item>
         <el-form-item label="源语言"><el-input v-model="taskForm.sourceLang" placeholder="默认 zh" /></el-form-item>
         <el-form-item label="目标语言">
           <el-select v-model="taskForm.targetLang" style="width:100%">
-            <el-option v-for="l in LANGS" :key="l" :label="l" :value="l" />
+            <el-option v-for="l in LANGS" :key="l" :label="langLabel(l)" :value="l" />
           </el-select>
         </el-form-item>
         <el-form-item label="源文案"><el-input v-model="taskForm.sourceText" type="textarea" :rows="3" /></el-form-item>
@@ -154,6 +154,45 @@ import {
 const tab = ref<'overview' | 'platform' | 'video' | 'task'>('overview')
 const LANGS = ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'pt', 'ru', 'ar']
 const VIDEO_STATUSES: OverseasVideoStatus[] = ['draft', 'translating', 'published', 'failed']
+
+/** 语言代码 → 中文显示（值保持语言码，仅展示中文化） */
+const LANG_LABELS: Record<string, string> = {
+  zh: '中文',
+  en: '英语',
+  ja: '日语',
+  ko: '韩语',
+  es: '西班牙语',
+  fr: '法语',
+  de: '德语',
+  pt: '葡萄牙语',
+  ru: '俄语',
+  ar: '阿拉伯语',
+}
+function langLabel(l: string): string {
+  return LANG_LABELS[l] ?? l
+}
+
+/** 视频状态 → 中文显示（值保持英文状态码，仅展示中文化） */
+const VIDEO_STATUS_LABELS: Record<string, string> = {
+  draft: '草稿',
+  translating: '翻译中',
+  published: '已发布',
+  failed: '失败',
+}
+function videoStatusLabel(s: string): string {
+  return VIDEO_STATUS_LABELS[s] ?? s
+}
+
+/** 任务状态 → 中文显示（值保持英文状态码，仅展示中文化） */
+const TASK_STATUS_LABELS: Record<string, string> = {
+  pending: '排队中',
+  running: '执行中',
+  done: '已完成',
+  failed: '失败',
+}
+function taskStatusLabel(s: string): string {
+  return TASK_STATUS_LABELS[s] ?? s
+}
 
 // 概览
 const summary = ref<OverseasSummary | null>(null)

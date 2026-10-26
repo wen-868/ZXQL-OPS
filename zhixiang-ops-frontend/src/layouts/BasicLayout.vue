@@ -1,413 +1,709 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import * as ElIcons from '@element-plus/icons-vue'
-import { Expand, Fold, Menu as MenuIcon, SwitchButton } from '@element-plus/icons-vue'
+import { Fold } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { menuGroups } from '@/config/menu'
+import {
+  ecommerceMenuGroups,
+  globalCategories,
+  videoMenuGroups,
+  type MenuGroup,
+  type MenuItem,
+} from '@/config/menu'
 import { useAppStore } from '@/stores/app'
 import AiChatWidget from '@/components/ai-chat/AiChatWidget.vue'
+import TaskPanel from '@/components/workspace/TaskPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
 
-const activeMenu = computed(() => route.path)
-const collapsed = computed(() => appStore.sidebarCollapsed)
-const userName = computed(() => appStore.user?.realName || appStore.user?.username || '未登录')
-const pageTitle = computed(() => route.meta.title || '智享全链运营系统')
+const VIDEO_PATHS = new Set(videoMenuGroups.flatMap((g) => g.children.map((c) => c.path)))
+const ECO_PATHS = new Set(ecommerceMenuGroups.flatMap((g) => g.children.map((c) => c.path)))
 
-function resolveIcon(name?: string) {
-  if (name && name in ElIcons) return (ElIcons as Record<string, unknown>)[name]
-  return MenuIcon
+const board = ref<'video' | 'ecommerce'>('video')
+const menuOpen = ref(false)
+const collapsedGroups = ref<Record<string, boolean>>({})
+const genOpen = ref<string | null>(null)
+const aiOpen = ref(true)
+
+interface ModuleTab {
+  path: string
+  title: string
+  group: string
+}
+// 注意：必须先于下方 immediate watch 声明，否则 ensureModuleTab 触发 TDZ 错误
+const moduleTabs = ref<ModuleTab[]>([])
+
+watch(
+  () => route.path,
+  (p) => {
+    // 导航离开当前视图时取消激活任务，避免任务面板遮住目标页面（点任务标签可重新激活）
+    if (appStore.activeTaskId !== null) appStore.openTask(null)
+    if (ECO_PATHS.has(p)) board.value = 'ecommerce'
+    else if (VIDEO_PATHS.has(p)) board.value = 'video'
+    ensureModuleTab(p)
+  },
+  { immediate: true },
+)
+watch(
+  () => appStore.aiTask,
+  (v) => {
+    if (v) aiOpen.value = true
+  },
+)
+
+const activeMenu = computed(() => route.path)
+const activeGroups = computed<MenuGroup[]>(() =>
+  board.value === 'video' ? videoMenuGroups : ecommerceMenuGroups,
+)
+const activeTask = computed(
+  () => appStore.tasks.find((t) => t.id === appStore.activeTaskId) ?? null,
+)
+
+const aiWidget = ref<InstanceType<typeof AiChatWidget> | null>(null)
+
+function findMenuMeta(path: string): { title: string; group: string; board?: string } | null {
+  for (const g of videoMenuGroups) {
+    const item = g.children.find((c) => c.path === path)
+    if (item) return { title: item.title, group: g.title, board: '短视频运营' }
+  }
+  for (const g of ecommerceMenuGroups) {
+    const item = g.children.find((c) => c.path === path)
+    if (item) return { title: item.title, group: g.title, board: '电商运营' }
+  }
+  for (const cat of globalCategories) {
+    const item = cat.children.find((c) => c.path === path)
+    if (item) return { title: item.title, group: cat.title, board: '通用' }
+  }
+  if (path === '/home') return { title: '运营总览', group: '', board: '' }
+  return null
+}
+
+function ensureModuleTab(path: string) {
+  if (path === '/home' || path === '/' || path === '/login') return
+  const meta = findMenuMeta(path)
+  if (!meta) return
+  if (!moduleTabs.value.some((t) => t.path === path)) {
+    moduleTabs.value.push({ path, title: meta.title, group: meta.group })
+  }
+}
+
+function closeModuleTab(path: string) {
+  moduleTabs.value = moduleTabs.value.filter((t) => t.path !== path)
+  if (route.path === path) {
+    const last = moduleTabs.value[moduleTabs.value.length - 1]
+    router.push(last?.path || '/home')
+  }
 }
 
 function go(path: string) {
+  menuOpen.value = false
+  genOpen.value = null
   if (path !== route.path) router.push(path)
 }
 
-function logout() {
-  appStore.clearAuth()
-  ElMessage.success('已退出登录')
-  router.replace('/login')
+function goOverview() {
+  appStore.openTask(null)
+  go('/home')
 }
+
+function askAI(item: MenuItem) {
+  menuOpen.value = false
+  aiOpen.value = true
+  aiWidget.value?.openWithPrompt(item.aiPrompt || `请帮我处理「${item.title}」`)
+}
+
+function toggleGroup(title: string) {
+  collapsedGroups.value = { ...collapsedGroups.value, [title]: !collapsedGroups.value[title] }
+}
+
+function onDocClick(e: MouseEvent) {
+  const t = e.target as HTMLElement
+  if (!t.closest('.genbar')) genOpen.value = null
+}
+
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
-  <div class="basic-layout">
-    <!-- 侧边栏：窄版居中导航轨道 -->
+  <div class="app-shell">
     <aside
-      class="layout-aside"
-      :class="{ collapsed }"
-      aria-label="主导航菜单"
+      class="sidebar"
+      :class="{ collapsed: appStore.sidebarCollapsed, 'aside-open': menuOpen }"
+      aria-label="板块导航"
     >
-      <!-- 品牌区 -->
-      <div class="brand" aria-label="智享全链运营系统">
-        <span class="brand-mark" aria-hidden="true">智</span>
-        <span v-show="!collapsed" class="brand-text">智享全链运营</span>
+      <div class="brand">
+        <div class="logo">智</div>
+        <div>
+          <div class="name">智享全链</div>
+          <div class="sub">运营工作台</div>
+        </div>
       </div>
-
-      <!-- 菜单滚动区 -->
-      <nav class="menu-scroll" aria-label="模块导航">
-        <div
-          v-for="group in menuGroups"
-          :key="group.title"
-          class="menu-group"
+      <div class="board-tab" role="tablist" aria-label="运营板块切换">
+        <button
+          type="button"
+          role="tab"
+          :class="{ active: board === 'video' }"
+          :aria-selected="board === 'video'"
+          @click="board = 'video'"
         >
-          <div v-show="!collapsed" class="menu-group-title">
-            {{ group.title }}
+          短视频运营
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :class="{ active: board === 'ecommerce' }"
+          :aria-selected="board === 'ecommerce'"
+          @click="board = 'ecommerce'"
+        >
+          电商运营
+        </button>
+      </div>
+      <div class="nav-scroll">
+        <div
+          v-for="group in activeGroups"
+          :key="group.title"
+          class="group"
+          :class="{ collapsed: collapsedGroups[group.title] }"
+        >
+          <div class="ghead" @click="toggleGroup(group.title)">
+            <span>{{ group.title }}</span>
+            <span class="arrow" aria-hidden="true">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+            </span>
           </div>
-          <ul class="menu-list">
+          <ul>
             <li
               v-for="item in group.children"
-              :key="item.path"
-              class="menu-item"
+              :key="item.title + item.path"
               :class="{ active: activeMenu === item.path }"
-              :aria-current="activeMenu === item.path ? 'page' : undefined"
+              @click="go(item.path)"
             >
-              <a
-                href="javascript:void(0)"
-                role="menuitem"
-                :aria-label="item.title + (item.real ? '' : '（建设中）')"
-                :title="collapsed ? item.title : ''"
-                tabindex="0"
-                @click="go(item.path)"
-                @keydown.enter="go(item.path)"
-              >
-                <el-icon class="menu-item-icon">
-                  <component :is="resolveIcon(item.icon)" />
-                </el-icon>
-                <span v-show="!collapsed" class="menu-item-text">{{
-                  item.title
-                }}</span>
-              </a>
+              <span>{{ item.title }}</span>
+              <span
+                class="ai-tag"
+                title="交给 AI"
+                @click.stop="askAI(item)"
+              >@AI</span>
             </li>
           </ul>
         </div>
-      </nav>
-
-      <!-- 侧边栏底部署名 / 折叠入口 -->
-      <button
-        class="collapse-rail-btn"
-        type="button"
-        :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'"
-        :title="collapsed ? '展开' : '收起'"
-        @click="appStore.toggleSidebar()"
-      >
-        <el-icon><component :is="collapsed ? Expand : Fold" /></el-icon>
-      </button>
+      </div>
+      <div class="genbar">
+        <div v-for="cat in globalCategories" :key="cat.title" class="gen-wrap">
+          <button type="button" @click.stop="genOpen = genOpen === cat.title ? null : cat.title">
+            {{ cat.title }}
+          </button>
+          <div v-if="genOpen === cat.title" class="gen-menu">
+            <button
+              v-for="item in cat.children"
+              :key="item.path + item.title"
+              type="button"
+              @click="go(item.path)"
+            >
+              {{ item.title }}
+            </button>
+          </div>
+        </div>
+      </div>
     </aside>
 
-    <!-- 主区域：顶部栏 + 内容区 -->
-    <div class="layout-main">
-      <header class="layout-header" role="banner">
-        <h1 class="page-title">{{ pageTitle }}</h1>
-        <div class="header-right">
-          <span class="tenant-tag" :title="'当前租户标识'">
-            租户：<strong>{{ appStore.tenantId }}</strong>
-          </span>
-          <span class="user-name" :title="userName">{{ userName }}</span>
+    <!-- 主工作区：原型 order:2（AI dock 默认中置 order:1） -->
+    <section class="main" :class="{ 'ws-hidden': !appStore.workspaceOpen }">
+      <div class="work-top">
+        <button
+          type="button"
+          class="menu-btn mobile-only"
+          :aria-label="menuOpen ? '收起导航' : '展开导航'"
+          @click="menuOpen = !menuOpen"
+        >
+          <el-icon :size="18"><Fold /></el-icon>
+        </button>
+        <div class="tabs" role="tablist" aria-label="工作区标签">
           <button
-            class="logout-btn"
             type="button"
-            title="退出登录"
-            aria-label="退出登录"
-            @click="logout"
+            class="tab-item"
+            :class="{ active: !activeTask && route.path === '/home' }"
+            @click="goOverview"
           >
-            <el-icon><SwitchButton /></el-icon>
+            运营总览
+          </button>
+          <button
+            v-for="tab in moduleTabs"
+            :key="tab.path"
+            type="button"
+            class="tab-item"
+            :class="{ active: !activeTask && route.path === tab.path }"
+            @click="appStore.openTask(null); go(tab.path)"
+          >
+            {{ tab.title }}
+            <span class="x" @click.stop="closeModuleTab(tab.path)">✕</span>
+          </button>
+          <button
+            v-for="t in appStore.tasks"
+            :key="t.id"
+            type="button"
+            class="tab-item"
+            :class="{ active: appStore.activeTaskId === t.id }"
+            @click="appStore.openTask(t.id)"
+          >
+            <span class="dot" :class="t.status" />
+            {{ t.title }}
+            <span class="x" @click.stop="appStore.closeTask(t.id)">✕</span>
           </button>
         </div>
-      </header>
-      <main class="layout-content" role="main" aria-label="内容区域">
-        <div class="content-shell">
-          <router-view v-slot="{ Component }">
-            <component :is="Component" />
-          </router-view>
+        <div class="topright">
+          <button
+            class="icon-btn ws-toggle"
+            type="button"
+            title="收起工作区"
+            @click="appStore.toggleWorkspace()"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /><path d="M18 9l2 2-2 2" /></svg>
+          </button>
         </div>
-      </main>
-      <!-- AI 助手浮动对话框 -->
-      <AiChatWidget />
-    </div>
+      </div>
+
+      <div class="workspace">
+        <TaskPanel
+          v-if="activeTask"
+          :task="activeTask"
+          :board="board"
+          @completed="activeTask.stepIndex = 5; activeTask.status = 'done'"
+          @confirm="activeTask.status = 'done'; ElMessage.success('真实自动化链执行完成')"
+          @reject="activeTask.status = 'running'; ElMessage.info('已驳回，请人工调整后再提交')"
+        />
+        <router-view v-else v-slot="{ Component }">
+          <component :is="Component" />
+        </router-view>
+      </div>
+    </section>
+
+    <!-- AI 对话区：原型 order:1 中置；收起工作区后 full 铺满 -->
+    <AiChatWidget
+      v-show="aiOpen"
+      ref="aiWidget"
+      class="ai-dock"
+      :class="{ full: !appStore.workspaceOpen }"
+    />
   </div>
 </template>
 
 <style scoped>
-/* ========================================
-   布局根容器
-   ======================================== */
-.basic-layout {
+.app-shell {
   display: flex;
   height: 100vh;
-  background: var(--el-bg-color-page);
+  overflow: hidden;
+  background: var(--app-neutral-50);
+  color: var(--app-neutral-800);
+}
+.app-shell :deep(.ai-chat-root) {
+  order: 1;
+}
+.app-shell :deep(.ai-chat-root.full) {
+  width: auto;
+  flex: 1;
+  min-width: 0;
 }
 
-/* ========================================
-   侧边栏 —— 窄版居中导航轨道
-   ======================================== */
-.layout-aside {
-  width: var(--sidebar-expanded-w);       /* 208px */
+.sidebar {
+  width: var(--sidebar-expanded-w);
   background: var(--sidebar-bg);
-  color: var(--sidebar-text);
+  border-right: 1px solid var(--sidebar-divider);
   display: flex;
   flex-direction: column;
-  transition: width var(--duration-normal) var(--ease-in-out);
   flex-shrink: 0;
+  transition: width 0.2s ease, border-color 0.2s ease;
   overflow: hidden;
-  position: relative;
-  border-right: 1px solid var(--sidebar-divider);
 }
-
-.layout-aside.collapsed {
-  width: var(--sidebar-collapsed-w);      /* 72px */
+.sidebar.collapsed {
+  width: 0;
+  border-right: none;
 }
-
-/* 品牌区 —— 居中 */
 .brand {
-  height: 64px;
+  /* border-box 48px：与 AI 头 / 工作区顶栏底线对齐（项目无全局 border-box） */
+  box-sizing: border-box;
+  height: 48px;
+  flex-shrink: 0;
+  padding: 0 14px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-  flex-shrink: 0;
-}
-
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--app-brand-500), var(--app-brand-700));
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-sm);
-}
-
-.brand-text {
-  font-weight: 700;
-  font-size: var(--text-md);
-  color: var(--app-neutral-800);
+  gap: 9px;
+  border-bottom: 1px solid var(--sidebar-divider);
   white-space: nowrap;
-  overflow: hidden;
+}
+.logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #3b82f6, #22c55e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.name {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+.sub {
+  font-size: 11px;
+  color: var(--app-neutral-400);
+  margin-top: 1px;
 }
 
-/* 菜单滚动区 */
-.menu-scroll {
+.board-tab {
+  display: flex;
+  gap: 6px;
+  padding: 12px 14px 6px;
+}
+.board-tab button {
+  flex: 1;
+  padding: 9px 0;
+  border: 1px solid var(--app-neutral-200);
+  background: transparent;
+  color: var(--app-neutral-400);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+.board-tab button.active {
+  background: var(--app-brand-500);
+  color: #fff;
+  border-color: var(--app-brand-500);
+}
+.board-tab button:hover:not(.active) {
+  border-color: var(--app-brand-500);
+  color: var(--app-neutral-800);
+}
+
+.nav-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-2) 0;
-  scrollbar-width: thin;
+  padding: 8px;
 }
-
-/* 菜单分组 */
-.menu-group {
-  margin-bottom: var(--space-2);
+.group {
+  margin-bottom: 6px;
 }
-
-.menu-group-title {
-  padding: var(--space-4) 0 var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--sidebar-group-title);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  text-align: center;
-  white-space: nowrap;
-}
-
-/* 菜单列表 */
-.menu-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-/* 菜单项 —— 居中胶囊 */
-.menu-item a {
-  position: relative;
+.ghead {
+  padding: 9px 10px;
+  font-size: 12px;
+  color: var(--app-neutral-400);
+  font-weight: 600;
   display: flex;
   align-items: center;
-  justify-content: center;       /* 图标+文字整体居中 */
-  gap: var(--sidebar-item-gap);
-  height: 40px;
-  margin: 2px var(--sidebar-item-inset-x);
-  padding: 0 var(--space-3);
-  border-radius: var(--sidebar-item-radius);
-  color: var(--sidebar-text);
-  text-decoration: none;
-  font-size: var(--text-base);
+  justify-content: space-between;
   cursor: pointer;
-  outline: none;
-  transition: background-color var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
+  border-radius: 6px;
+  white-space: nowrap;
 }
-
-/* 悬浮态 */
-.menu-item a:hover,
-.menu-item a:focus-visible {
+.ghead:hover {
+  color: var(--app-neutral-800);
+}
+.arrow {
+  transition: 0.2s;
+  display: inline-flex;
+}
+.group.collapsed .arrow {
+  transform: rotate(-90deg);
+}
+.group ul {
+  list-style: none;
+  margin: 2px 0 6px;
+  padding: 0;
+}
+.group.collapsed ul {
+  display: none;
+}
+.group li {
+  padding: 8px 12px 8px 22px;
+  font-size: 13px;
+  color: var(--app-neutral-800);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  white-space: nowrap;
+}
+.group li:hover {
   background: var(--sidebar-item-hover);
-  color: var(--sidebar-text-hover);
 }
-
-/* 选中态 —— 柔和主色胶囊 + 左侧指示条 */
-.menu-item.active a {
+.group li.active {
   background: var(--sidebar-item-active);
   color: var(--sidebar-text-active);
-  font-weight: 600;
+}
+.ai-tag {
+  font-size: 10px;
+  color: var(--app-brand-500);
+  border: 1px solid var(--app-brand-500);
+  border-radius: 5px;
+  padding: 1px 6px;
+  background: #fff;
+}
+.group li.active .ai-tag {
+  color: #fff;
+  border-color: #fff;
+  background: transparent;
+}
+.ai-tag:hover {
+  background: var(--app-brand-500);
+  color: #fff;
 }
 
-.menu-item.active a::before {
-  content: '';
+.genbar {
+  border-top: 1px solid var(--sidebar-divider);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  position: relative;
+}
+.gen-wrap {
+  position: relative;
+}
+.genbar button {
+  width: 100%;
+  padding: 8px 2px;
+  font-size: 11px;
+  background: var(--app-neutral-100);
+  border: 1px solid var(--app-neutral-200);
+  color: var(--app-neutral-800);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.genbar > .gen-wrap > button:hover,
+.gen-menu button:hover {
+  border-color: var(--app-brand-500);
+}
+.gen-menu {
   position: absolute;
   left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--sidebar-active-bar);
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 6px;
+  background: #fff;
+  border: 1px solid var(--app-neutral-200);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+  padding: 4px;
 }
-
-/* 收起态：仅图标居中轨道 */
-.layout-aside.collapsed .menu-item a {
-  margin: 2px var(--space-2);
-  padding: 0;
-  gap: 0;
-}
-
-/* 图标 */
-.menu-item-icon {
-  font-size: var(--sidebar-icon-size);
-  flex-shrink: 0;
-}
-
-/* 菜单项文字 */
-.menu-item-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 侧边栏底部折叠入口 */
-.collapse-rail-btn {
-  border: none;
+.gen-menu button {
+  display: block;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 12px;
   background: transparent;
-  cursor: pointer;
-  color: var(--app-neutral-400);
-  height: 44px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  border-top: 1px solid var(--sidebar-divider);
-  transition: color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out);
+  border: none;
+  border-radius: 6px;
 }
 
-.collapse-rail-btn:hover {
-  color: var(--app-brand-600);
-  background: var(--sidebar-item-hover);
-}
-
-/* ========================================
-   主区域
-   ======================================== */
-.layout-main {
+.main {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  order: 2;
 }
-
-/* ========================================
-   顶部栏
-   ======================================== */
-.layout-header {
-  height: 56px;
-  background: var(--app-neutral-0);
+.main.ws-hidden {
+  display: none;
+}
+.work-top {
+  box-sizing: border-box;
+  height: 48px;
   border-bottom: 1px solid var(--app-neutral-200);
-  box-shadow: var(--shadow-sm);
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--space-6);
+  align-items: stretch;
+  padding: 0 14px;
   flex-shrink: 0;
+  background: #fff;
+  gap: 8px;
 }
-
-/* 页面标题 */
-.page-title {
-  font-size: var(--text-md);
-  font-weight: 600;
-  margin: 0;
-  color: var(--app-neutral-800);
+.tabs {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  overflow-x: auto;
+  min-width: 0;
+  align-self: stretch;
+  scrollbar-width: none;
 }
-
-/* 右侧区域 */
-.header-right {
-  margin-left: auto;
+.tabs::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.tab-item {
+  flex: 1 1 0;
+  min-width: 96px;
+  max-width: 200px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--app-neutral-400);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-}
-
-/* 租户标签 */
-.tenant-tag {
-  font-size: var(--text-base-sm);
-  color: var(--app-neutral-500);
-}
-
-.tenant-tag strong {
-  color: var(--app-brand-600);
-  font-weight: 600;
-}
-
-/* 用户名 */
-.user-name {
-  font-size: var(--text-base-sm);
-  color: var(--app-neutral-700);
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 退出按钮 */
-.logout-btn {
-  border: none;
+  gap: 8px;
+  height: 36px;
+  border-radius: 8px 8px 0 0;
+  position: relative;
   background: transparent;
-  cursor: pointer;
-  font-size: 18px;
-  color: var(--app-neutral-400);
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
+  font-family: inherit;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.tab-item:hover:not(.active) {
+  color: var(--app-neutral-800);
+  background: var(--app-neutral-50);
+}
+/* 激活：白底连通页签 + 顶部品牌色细线 */
+.tab-item.active {
+  background: #fff;
+  color: var(--app-brand-500);
+  border-color: var(--app-neutral-200);
+  border-bottom-color: transparent;
+  box-shadow: 0 1px 0 0 #fff;
+  z-index: 2;
+  font-weight: 500;
+}
+.tab-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--app-brand-500);
+}
+.tab-item .x {
+  font-size: 12px;
+  line-height: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out);
+  opacity: 0.45;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.tab-item .x:hover {
+  opacity: 1;
+  color: #fff;
+  background: var(--app-danger-500);
+}
+.tab-item .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-warning-500);
+  flex-shrink: 0;
+}
+.dot.running {
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.35); }
+  50% { box-shadow: 0 0 0 4px rgba(217, 119, 6, 0); }
+}
+.dot.pending_confirm {
+  background: var(--app-brand-500);
+}
+.dot.done {
+  background: var(--app-success-500);
 }
 
-.logout-btn:hover {
-  color: var(--app-danger-500);
-  background: var(--app-danger-50);
+.topright {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  align-self: stretch;
+  border-left: 1px solid var(--app-neutral-200);
+  padding-left: 12px;
+}
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--app-neutral-400);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+.icon-btn:hover {
+  color: var(--app-brand-500);
+}
+.icon-btn.active {
+  color: #fff;
+  background: var(--app-brand-500);
 }
 
-/* ========================================
-   内容区
-   ======================================== */
-.layout-content {
+.workspace {
   flex: 1;
   overflow-y: auto;
+  padding: 20px;
+  background: var(--app-neutral-50);
 }
 
-/* 内容壳：最大宽度居中，形成聚焦阅读区 */
-.content-shell {
-  max-width: var(--page-max-width);
-  margin: 0 auto;
-  padding: var(--content-padding);
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: inline-flex;
+  }
+  .menu-btn {
+    border: 1px solid var(--app-neutral-200);
+    background: var(--app-neutral-100);
+    color: var(--app-neutral-600);
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.collapsed {
+    width: var(--sidebar-expanded-w);
+    transform: translateX(-100%);
+  }
+  .sidebar.aside-open {
+    transform: translateX(0);
+  }
 }
 </style>

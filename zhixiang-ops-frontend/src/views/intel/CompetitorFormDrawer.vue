@@ -42,13 +42,27 @@ const form = reactive<CompetitorPayload & { id?: number }>({
   category: '',
 })
 
+/** 表单默认值：新建或未传竞品时的兜底 */
+const FORM_DEFAULTS: CompetitorPayload & { id?: number } = {
+  id: undefined,
+  platform: 'douyin',
+  name: '',
+  url: '',
+  category: '',
+}
+
 function resetForm() {
   isEdit.value = !!props.competitor
-  form.id = props.competitor?.id
-  form.platform = props.competitor?.platform ?? 'douyin'
-  form.name = props.competitor?.name ?? ''
-  form.url = props.competitor?.url ?? ''
-  form.category = props.competitor?.category ?? ''
+  Object.assign(form, FORM_DEFAULTS)
+  if (props.competitor) {
+    Object.assign(form, {
+      id: props.competitor.id,
+      platform: props.competitor.platform,
+      name: props.competitor.name,
+      url: props.competitor.url,
+      category: props.competitor.category,
+    })
+  }
   formRef.value?.clearValidate()
 }
 
@@ -114,8 +128,8 @@ async function handleSubmit() {
       <el-form-item label="竞品名称" prop="name">
         <el-input v-model="form.name" placeholder="如 竞品A" aria-label="竞品名称" />
       </el-form-item>
-      <el-form-item label="主页URL" prop="url">
-        <el-input v-model="form.url" placeholder="竞品主页链接" aria-label="主页URL" />
+      <el-form-item label="主页地址" prop="url">
+        <el-input v-model="form.url" placeholder="竞品主页链接" aria-label="主页地址" />
       </el-form-item>
       <el-form-item label="分类/赛道" prop="category">
         <el-input v-model="form.category" placeholder="如 美妆" aria-label="分类/赛道" />

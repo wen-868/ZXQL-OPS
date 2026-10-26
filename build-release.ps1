@@ -81,6 +81,15 @@ $envLines = $envLines -replace '^NODE_ENV=.*', 'NODE_ENV=production'
 $envLines = $envLines -replace '^OPS_DEMO_MODE=.*', 'OPS_DEMO_MODE=true'
 # 交付包安全默认：清空可能含真实凭证的密钥，部署时再填（避免密钥随包泄露）
 $envLines = $envLines -replace '^OPS_LLM_GATEWAY_KEY=.*', 'OPS_LLM_GATEWAY_KEY='
+# 每次打包生成独立强随机 JWT_SECRET/CSRF_SECRET（拒绝占位符随包分发；后端启动时校验强度）
+$rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+$mkSecret = {
+  $buf = New-Object byte[] 48
+  $rng.GetBytes($buf)
+  [Convert]::ToBase64String($buf)
+}
+$envLines = $envLines -replace '^JWT_SECRET=.*', ('JWT_SECRET=' + (& $mkSecret))
+$envLines = $envLines -replace '^CSRF_SECRET=.*', ('CSRF_SECRET=' + (& $mkSecret))
 $header = @(
   '# ============================================================',
   '# 智享全链运营系统 生产环境配置（由 build-release.ps1 生成）',
@@ -88,7 +97,7 @@ $header = @(
   '# 修改后需重启后端生效（.\start.ps1 -Rollback 再 .\start.ps1）',
   '#',
   '# 部署前必改项：',
-  '#   1. JWT_SECRET / CSRF_SECRET：强随机串，且与管理系统一致',
+  '#   1. JWT_SECRET / CSRF_SECRET：本包已随机生成；如需与管理系统 SSO 互通须改为同一强随机串',
   '#   2. DB_PASSWORD：与随包 MariaDB 的 root 密码一致（默认 your_password，建议修改）',
   '#   3. OPS_INTEGRATION_MODE=connected 时填 OPS_MS_CLIENT_ID/SECRET',
   '#   4. OPS_OSS_*：生产建议配置对象存储（默认落本地 ./uploads）',
@@ -99,7 +108,7 @@ $header = @(
   ''
 )
 ($header + $envLines) | Out-File -FilePath (Join-Path $outBackend '.env') -Encoding utf8
-Write-Host '生产 .env 已生成（NODE_ENV=production, OPS_DEMO_MODE=true 免密演示登录）' -ForegroundColor Green
+Write-Host '生产 .env 已生成（NODE_ENV=production, OPS_DEMO_MODE=true, 随机 JWT/CSRF 密钥）' -ForegroundColor Green
 
 Write-Host ''
 Write-Host '=== 5. 拷贝前端 ===' -ForegroundColor Cyan
@@ -126,16 +135,42 @@ if (Test-Path $redisSrc) {
 }
 $mariadbZip = Join-Path $outTools 'mariadb.zip'
 if (-not (Test-Path $mariadbZip)) {
+  # 快照一致性：压缩前若本机 MariaDB 正在运行，先优雅停机再打包，避免压出损坏/不一致的数据快照
+  $devMdb = 'D:\Users\ZXQL\ZXQL-OPS\tools\mariadb\mariadb-11.4.5-winx64\bin\mysqladmin.exe'
+  $dbPass = ($envLines | Where-Object { $_ -match '^DB_PASSWORD=' }) -replace '^DB_PASSWORD=', ''
+  if ([string]::IsNullOrEmpty($dbPass)) { $dbPass = 'your_password' }
+  if (Test-Path $devMdb) {
+    $t = New-Object Net.Sockets.TcpClient
+    $running = $false
+    try { $t.Connect('127.0.0.1', 3306); $running = $t.Connected } catch { } finally { $t.Dispose() }
+    if ($running) {
+      Write-Host '检测到本机 MariaDB 运行中，先优雅停机再打包快照…' -ForegroundColor Yellow
+      & $devMdb -h 127.0.0.1 -uroot -p"$dbPass" shutdown 2>&1 | Out-Null
+      $deadline = (Get-Date).AddSeconds(30)
+      while ((Get-Date) -lt $deadline) {
+        $t2 = New-Object Net.Sockets.TcpClient
+        try { $t2.Connect('127.0.0.1', 3306); if (-not $t2.Connected) { break } } catch { break } finally { $t2.Dispose() }
+        Start-Sleep -Seconds 1
+      }
+      Write-Host 'MariaDB 已停机' -ForegroundColor Green
+    }
+  }
   Write-Host '压缩 MariaDB（约 87MB，请稍候）…'
   Compress-Archive -Path (Join-Path (Join-Path $ROOT 'tools') 'mariadb') -DestinationPath $mariadbZip -Force
   Write-Host 'mariadb.zip 已生成'
+  # 恢复本机开发库
+  if ($running) {
+    Write-Host '重新启动本机开发 MariaDB…' -ForegroundColor Yellow
+    Start-Process -FilePath (Join-Path (Join-Path (Join-Path (Join-Path $ROOT 'tools') 'mariadb') 'mariadb-11.4.5-winx64') 'bin\mariadbd.exe') -ArgumentList '--datadir=D:\Users\ZXQL\ZXQL-OPS\tools\mariadb\data','--port=3306','--bind-address=127.0.0.1','--skip-ssl' -WindowStyle Hidden | Out-Null
+  }
 } else {
   Write-Host '复用已存在的 mariadb.zip（跳过压缩）'
 }
 
 Write-Host ''
-Write-Host '=== 8. 启动脚本 / 版本 / 说明 ===' -ForegroundColor Cyan
+Write-Host '=== 8. 启动脚本 / 备份 / 版本 / 说明 ===' -ForegroundColor Cyan
 Copy-Item (Join-Path $ASSETS 'start.ps1') $OUT -Force
+Copy-Item (Join-Path $ASSETS 'backup.ps1') $OUT -Force
 ('version=' + $VERSION + "`nbuild=" + $BUILD_TS) | Out-File -FilePath (Join-Path $OUT 'version.txt') -Encoding utf8
 $readme = @"
 # 智享全链运营系统 正式发布包 (v$VERSION)
@@ -148,7 +183,9 @@ $readme = @"
 - index.html      运营决策看板
 - tools/          mariadb.zip（首次解压）+ redis-server.exe
 - logs/           运行日志
+- backups/        数据库备份（backup.ps1 生成）
 - start.ps1       一键启动（生产模式）
+- backup.ps1      数据库备份脚本
 - version.txt     版本与构建时间
 
 ## 一键启动
@@ -157,6 +194,12 @@ $readme = @"
 
 ## 停止 / 回滚
     .\start.ps1 -Rollback
+
+## 数据备份（重要：本包内置数据库，建议定期备份）
+    .\backup.ps1                  # 备份到 backups/，保留最近 7 天
+    .\backup.ps1 -KeepDays 14     # 自定义保留天数
+    # 每日 03:00 自动备份（计划任务，一条命令）：
+    schtasks /Create /TN "ZXQLOps-Backup" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File \"%LOCALAPPDATA%\ZXQL-Ops\backup.ps1\"" /SC DAILY /ST 03:00
 
 ## 部署前必改（backend/.env）
 1. JWT_SECRET / CSRF_SECRET：强随机串，且与管理系统一致

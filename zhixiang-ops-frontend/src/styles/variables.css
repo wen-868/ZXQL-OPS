@@ -8,72 +8,73 @@
      色彩系统
      ======================================== */
 
-  /* 品牌主色 —— 对齐 ZXQL-MS（Atlas Blue #3F6FEF，去紫调纯蓝） */
-  --app-brand-50:  #eef3fe;
-  --app-brand-100: #dbe5fc;
-  --app-brand-200: #b9cdf9;
-  --app-brand-300: #8eaff4;
-  --app-brand-400: #5a83f2;   /* hover */
-  --app-brand-500: #3f6fef;   /* primary */
-  --app-brand-600: #2f5bd6;   /* active */
-  --app-brand-700: #274bb4;
-  --app-brand-800: #203c91;
-  --app-brand-900: #1a2f73;
+  /* 品牌主色 —— 对齐运营系统 UI 原型（Accent #2563EB） */
+  --app-brand-50:  #eff6ff;
+  --app-brand-100: #dbeafe;
+  --app-brand-200: #bfdbfe;
+  --app-brand-300: #93c5fd;
+  --app-brand-400: #3b82f6;   /* hover / 渐变亮端 */
+  --app-brand-500: #2563eb;   /* primary */
+  --app-brand-600: #1d4ed8;   /* active */
+  --app-brand-700: #1e40af;
+  --app-brand-800: #1e3a8a;
+  --app-brand-900: #172554;
 
-  /* 成功 —— 对齐 MS success #0EA879 */
-  --app-success-50:  #e6f7f1;
-  --app-success-100: #c8efe3;
-  --app-success-500: #0ea879;
-  --app-success-600: #0c9468;
-  --app-success-700: #0a7a57;
+  /* 成功 —— 原型 accent-2 #16A34A */
+  --app-success-50:  #f0fdf4;
+  --app-success-100: #dcfce7;
+  --app-success-500: #16a34a;
+  --app-success-600: #15803d;
+  --app-success-700: #166534;
 
-  /* 警告 —— 对齐 MS warning #D48B3A */
-  --app-warning-50:  #fbf2e6;
-  --app-warning-100: #f5e3cd;
-  --app-warning-500: #d48b3a;
-  --app-warning-600: #b8762f;
-  --app-warning-700: #985f25;
+  /* 警告 —— 原型 warn #D97706 */
+  --app-warning-50:  #fffbeb;
+  --app-warning-100: #fef3c7;
+  --app-warning-500: #d97706;
+  --app-warning-600: #b45309;
+  --app-warning-700: #92400e;
 
-  /* 危险 —— 对齐 MS danger #C0392B */
-  --app-danger-50:  #faeae8;
-  --app-danger-100: #f3d4d0;
-  --app-danger-500: #c0392b;
-  --app-danger-600: #a32f23;
-  --app-danger-700: #85261c;
+  /* 危险 —— 原型 danger #DC2626 */
+  --app-danger-50:  #fef2f2;
+  --app-danger-100: #fee2e2;
+  --app-danger-500: #dc2626;
+  --app-danger-600: #b91c1c;
+  --app-danger-700: #991b1b;
 
-  /* 信息 —— 同主色（MS 以主色承载 info 语义） */
-  --app-info-50:  #eef3fe;
-  --app-info-100: #dbe5fc;
-  --app-info-500: #3f6fef;
-  --app-info-600: #2f5bd6;
-  --app-info-700: #274bb4;
+  /* 信息 —— 同主色 */
+  --app-info-50:  #eff6ff;
+  --app-info-100: #dbeafe;
+  --app-info-500: #2563eb;
+  --app-info-600: #1d4ed8;
+  --app-info-700: #1e40af;
 
-  /* 中性色 —— 对齐 MS 纯灰阶（无蓝调） #FFF→#111 */
+  /* 中性色 —— 原型灰阶 #f5f6f8 / #dcdfe4 / #8a9099 / #1a1d22 */
   --app-neutral-0:   #ffffff;
-  --app-neutral-50:  #f8f8f8;
-  --app-neutral-100: #f0f0f0;
-  --app-neutral-200: #e2e2e2;
-  --app-neutral-300: #cccccc;
-  --app-neutral-400: #999999;
-  --app-neutral-500: #666666;
-  --app-neutral-600: #444444;
-  --app-neutral-700: #333333;
-  --app-neutral-800: #222222;
-  --app-neutral-900: #111111;
+  --app-neutral-50:  #f5f6f8;
+  --app-neutral-100: #eceef1;
+  --app-neutral-200: #dcdfe4;
+  /* 400 用于次级文字，须 ≥4.5:1 对比度（#6b7280 on white = 4.83:1，原 #8a9099 仅 3.22:1 不达标） */
+  --app-neutral-300: #b8bdc6;
+  --app-neutral-400: #6b7280;
+  --app-neutral-500: #8a9099;
+  --app-neutral-600: #5c6169;
+  --app-neutral-700: #3a3e45;
+  --app-neutral-800: #1a1d22;
+  --app-neutral-900: #111318;
 
-  /* 侧边栏 —— 对齐 MS 浅色商业后台（frost-sidebar #FAFAFA，深色文字） */
-  --sidebar-bg:           #fafafa;
-  --sidebar-text:         #444444;   /* secondary */
-  --sidebar-text-hover:   #222222;   /* primary */
-  --sidebar-text-active:  #3f6fef;   /* 主色 */
-  --sidebar-item-hover:   rgba(0,0,0,0.04);
-  --sidebar-item-active:  rgba(63,111,239,0.12); /* 柔和主色背景，仿 ms primary-soft */
-  --sidebar-divider:      rgba(0,0,0,0.06);
-  --sidebar-group-title:  #999999;   /* placeholder */
-  --sidebar-badge:        #3f6fef;
+  /* 侧边栏 —— 原型白底 + 选中实心主色 */
+  --sidebar-bg:           #ffffff;
+  --sidebar-text:         #1a1d22;
+  --sidebar-text-hover:   #1a1d22;
+  --sidebar-text-active:  #ffffff;
+  --sidebar-item-hover:   #eceef1;
+  --sidebar-item-active:  #2563eb;
+  --sidebar-divider:      #dcdfe4;
+  --sidebar-group-title:  #8a9099;
+  --sidebar-badge:        #2563eb;
   /* 窄版居中导航：展开态收窄 + 收起态图标轨道；项内居中胶囊 */
   --sidebar-collapsed-w:  72px;
-  --sidebar-expanded-w:   208px;
+  --sidebar-expanded-w:   200px;
   --sidebar-icon-size:    18px;
   --sidebar-item-radius:  var(--radius-md);   /* 选中/悬浮胶囊圆角 */
   --sidebar-item-inset-x: var(--space-3);     /* 项左右留白，形成居中胶囊 */
@@ -180,9 +181,9 @@
   /* ========================================
      圆角与阴影
      ======================================== */
-  --radius-sm:   4px;
-  --radius-md:   6px;
-  --radius-lg:   8px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   10px;
   --radius-xl:   12px;
   --radius-2xl:  16px;
   --radius-full: 9999px;
@@ -195,8 +196,8 @@
   --shadow-xl:   0 20px 60px rgba(16,24,40,0.12);
 
   /* 主色投影（用于悬浮按钮等，基于 Atlas Blue rgb(63,111,239)） */
-  --app-brand-shadow:        rgba(63,111,239,0.35);
-  --app-brand-shadow-strong: rgba(63,111,239,0.5);
+  --app-brand-shadow:        rgba(37,99,235,0.35);
+  --app-brand-shadow-strong: rgba(37,99,235,0.5);
 
   /* ========================================
      动效

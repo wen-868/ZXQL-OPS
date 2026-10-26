@@ -28,7 +28,8 @@
   }
 
   function hasSession() {
-    return !!(localStorage.getItem(LS.msToken) && localStorage.getItem(LS.opsToken));
+    // 演示登录仅持有 ops token（无 ms token）也算会话
+    return !!localStorage.getItem(LS.opsToken);
   }
 
   function showLogin() {
@@ -127,6 +128,28 @@
     showApp();
   }
 
+  /** 演示登录：免账号密码，直接进入运营系统（不依赖管理系统） */
+  async function doDemoLogin() {
+    const resp = await fetch('/api/ops/auth/demo-login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    const json = await resp.json();
+    if (json.code !== '0') {
+      throw new Error(json.msg || '演示登录失败');
+    }
+    const ops = json.data;
+    localStorage.setItem(LS.opsToken, ops.token);
+    localStorage.setItem(LS.opsUser, JSON.stringify(ops.user || {}));
+    // 演示会话不涉及管理系统，清空残留的 ms 登录态避免误导
+    localStorage.removeItem(LS.msToken);
+    localStorage.removeItem(LS.msCsrf);
+    localStorage.removeItem(LS.msUser);
+    currentTab = 'ops';
+    showApp();
+  }
+
   function logout() {
     Object.values(LS).forEach((k) => localStorage.removeItem(k));
     $('#frame').src = 'about:blank';
@@ -144,6 +167,21 @@
       await doLogin($('#username').value.trim(), $('#password').value);
     } catch (ex) {
       err.textContent = ex.message || '登录失败';
+      err.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('#demo-login').addEventListener('click', async () => {
+    const err = $('#login-error');
+    err.classList.add('hidden');
+    const btn = $('#demo-login');
+    btn.disabled = true;
+    try {
+      await doDemoLogin();
+    } catch (ex) {
+      err.textContent = ex.message || '演示登录失败';
       err.classList.remove('hidden');
     } finally {
       btn.disabled = false;

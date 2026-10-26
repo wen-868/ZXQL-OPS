@@ -71,7 +71,7 @@ const singleSubmitting = ref(false)
 
 async function handleSingle() {
   if (singleForm.scriptId == null) {
-    ElMessage.warning('请选择脚本（必填，须 approved/published）')
+    ElMessage.warning('请选择脚本（必填，须已审核/已发布）')
     return
   }
   if (!singleForm.accountIds.length) {
@@ -197,11 +197,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="I 发布与分发">
+  <div class="page-container" aria-label="发布与分发">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1 class="page-title">I·发布管理</h1>
+        <h1 class="page-title">发布管理</h1>
         <p class="page-subtitle">脚本一键分发至多平台账号，支持批量分发与挂车转化漏斗追踪</p>
       </div>
     </div>
@@ -212,7 +212,7 @@ onMounted(async () => {
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="attributionId 由 F 脚本透传，发布前复用脚本合规预检；挂车商品 id 经商品适配层。"
+      title="归因标识由脚本模块透传，发布前复用脚本合规预检；挂车商品编号经商品适配层。"
     />
 
     <!-- 功能分区 -->
@@ -225,7 +225,7 @@ onMounted(async () => {
             <el-form-item label="脚本" required>
               <el-select
                 v-model="singleForm.scriptId"
-                placeholder="选择可发布脚本（approved/published）"
+                placeholder="选择可发布脚本（已审核/已发布）"
                 filterable
                 clearable
                 style="width: 360px"
@@ -259,7 +259,7 @@ onMounted(async () => {
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="平台 platform">
+            <el-form-item label="平台">
               <el-select
                 v-model="singleForm.platform"
                 placeholder="可选，默认按账号平台"
@@ -271,7 +271,7 @@ onMounted(async () => {
                 <el-option v-for="opt in platformOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
-            <el-form-item label="定时 scheduledAt">
+            <el-form-item label="定时时间">
               <el-date-picker
                 v-model="singleForm.scheduledAt"
                 type="datetime"
@@ -281,13 +281,13 @@ onMounted(async () => {
                 aria-label="定时发布时间"
               />
             </el-form-item>
-            <el-form-item label="挂车商品 id">
+            <el-form-item label="挂车商品编号">
               <el-input
                 v-model="singleForm.cartProductId"
                 placeholder="可选，挂车商品编号（经商品适配层）"
                 style="width: 320px"
                 size="default"
-                aria-label="挂车商品id"
+                aria-label="挂车商品编号"
                 clearable
               />
             </el-form-item>
@@ -392,7 +392,7 @@ onMounted(async () => {
         />
         <div v-else class="card">
           <el-table :data="tasks" stripe v-loading="taskLoadingIds.size > 0" aria-label="发布任务列表">
-            <el-table-column prop="id" label="ID" width="80" />
+            <el-table-column prop="id" label="编号" width="80" />
             <el-table-column prop="scriptId" label="脚本" width="90" />
             <el-table-column label="账号" min-width="180">
               <template #default="{ row }">{{ accountName(row.accountId) }}</template>
@@ -407,7 +407,7 @@ onMounted(async () => {
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="attributionId" label="attributionId" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="attributionId" label="归因标识" min-width="180" show-overflow-tooltip />
             <el-table-column label="发布时间" min-width="170">
               <template #default="{ row }">{{ formatDateTime(row.publishedAt) }}</template>
             </el-table-column>
@@ -443,7 +443,7 @@ onMounted(async () => {
                             {{ funnelMap[row.id].conversionRate }}
                           </el-descriptions-item>
                         </el-descriptions>
-                        <div class="funnel-hint">转化数据待 Y 订单回写（阶段1 cartClicks/orderConv=0）</div>
+                        <div class="funnel-hint">转化数据待订单模块回写（阶段1 挂车点击/订单转化=0）</div>
                       </template>
                       <el-empty v-else description="加载漏斗中" :image-size="40" />
                     </div>

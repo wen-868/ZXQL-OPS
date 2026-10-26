@@ -5,8 +5,8 @@
    ======================================== */
 
 :root {
-  /* ===== 品牌主色覆写（对齐 ZXQL-MS Atlas Blue） ===== */
-  --el-color-primary:          var(--app-brand-500);       /* #3f6fef */
+  /* ===== 品牌主色覆写（对齐运营系统 UI 原型 Accent） ===== */
+  --el-color-primary:          var(--app-brand-500);       /* #2563eb */
   --el-color-primary-light-3:  var(--app-brand-300);       /* #8eaff4 */
   --el-color-primary-light-5:  var(--app-brand-200);       /* #b9cdf9 */
   --el-color-primary-light-7:  var(--app-brand-100);       /* #dbe5fc */

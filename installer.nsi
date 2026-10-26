@@ -12,9 +12,10 @@ Unicode true
 
 Name "${APP_NAME}"
 OutFile "智享全链运营系统_安装版_v${APP_VERSION}.exe"
-InstallDir "$PROGRAMFILES64\ZXQL-Ops"
-InstallDirRegKey HKLM "${UNINST_KEY}" "InstallLocation"
-RequestExecutionLevel admin
+; per-user 安装：无需管理员权限，运行期对安装目录完全可写（服务栈需写入 logs/ 与数据库）
+InstallDir "$LOCALAPPDATA\ZXQL-Ops"
+InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation"
+RequestExecutionLevel user
 Icon "desktop\logo.ico"
 UninstallIcon "desktop\logo.ico"
 
@@ -48,15 +49,15 @@ Section "安装${APP_NAME}" SecMain
   ; 桌面快捷方式
   CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\ZXQLOpsDesktop.exe" "" "$INSTDIR\ZXQLOpsDesktop.exe"
 
-  ; 控制面板卸载信息
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "${APP_NAME}"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${APP_VERSION}"
-  WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "${APP_PUBLISHER}"
-  WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\ZXQLOpsDesktop.exe"
-  WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
-  WriteRegStr HKLM "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
-  WriteRegDWORD HKLM "${UNINST_KEY}" "NoModify" 1
-  WriteRegDWORD HKLM "${UNINST_KEY}" "NoRepair" 1
+  ; 控制面板卸载信息（HKCU，per-user 安装）
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayName" "${APP_NAME}"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayVersion" "${APP_VERSION}"
+  WriteRegStr HKCU "${UNINST_KEY}" "Publisher" "${APP_PUBLISHER}"
+  WriteRegStr HKCU "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\ZXQLOpsDesktop.exe"
+  WriteRegStr HKCU "${UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
+  WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegDWORD HKCU "${UNINST_KEY}" "NoModify" 1
+  WriteRegDWORD HKCU "${UNINST_KEY}" "NoRepair" 1
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   WriteRegDWORD HKLM "${UNINST_KEY}" "EstimatedSize" "$0"
 SectionEnd
@@ -72,7 +73,7 @@ Section "Uninstall"
   RMDir /r "$SMPROGRAMS\${APP_NAME}"
 
   ; 删除卸载信息
-  DeleteRegKey HKLM "${UNINST_KEY}"
+  DeleteRegKey HKCU "${UNINST_KEY}"
 
   ; 删除安装目录（含全部数据）
   RMDir /r "$INSTDIR"

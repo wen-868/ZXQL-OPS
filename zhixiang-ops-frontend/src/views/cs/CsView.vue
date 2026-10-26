@@ -287,15 +287,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="cs-view" aria-label="AA 智能客服中心">
+  <section class="cs-view" aria-label="智能客服中心">
     <el-alert
       type="info"
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="AA 智能客服中心：多触点会话 + AI 自动应答 / 转人工 / 工单 / 知识库；tenantId 由统一拦截器注入。"
+      title="智能客服中心：多触点会话 + AI 自动应答 / 转人工 / 工单 / 知识库；租户标识由统一拦截器注入。"
     />
-    <el-tabs v-model="activeTab" type="border-card" aria-label="AA 功能分区">
+    <el-tabs v-model="activeTab" type="border-card" aria-label="功能分区">
       <!-- ===== 1. 会话 ===== -->
       <el-tab-pane name="session">
         <template #label><span aria-label="会话标签页">会话</span></template>
@@ -364,7 +364,7 @@ onMounted(() => {
           <el-button type="primary" @click="loadTickets" :loading="ticketsLoading" aria-label="刷新工单">刷新</el-button>
         </div>
         <el-table :data="tickets" border v-loading="ticketsLoading" aria-label="工单列表">
-          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column prop="id" label="编号" width="70" />
           <el-table-column prop="sessionId" label="会话" width="80" />
           <el-table-column prop="buyerRef" label="买家" min-width="140" show-overflow-tooltip />
           <el-table-column prop="issue" label="问题" min-width="200" show-overflow-tooltip />
@@ -401,16 +401,16 @@ onMounted(() => {
         <div class="filter-bar" aria-label="知识库操作栏">
           <el-select v-model="knowledgeCategory" placeholder="分类" clearable style="width: 150px" aria-label="知识分类筛选" @change="loadKnowledge">
             <el-option label="全部分类" value="" />
-            <el-option label="商品 product" value="product" />
-            <el-option label="订单 order" value="order" />
-            <el-option label="物流 logistics" value="logistics" />
-            <el-option label="常见问题 faq" value="faq" />
+            <el-option label="商品" value="product" />
+            <el-option label="订单" value="order" />
+            <el-option label="物流" value="logistics" />
+            <el-option label="常见问题" value="faq" />
           </el-select>
           <el-button type="primary" @click="openCreateKn" aria-label="新增知识">新增知识</el-button>
           <el-button @click="syncKn" aria-label="同步知识库">同步知识库</el-button>
         </div>
         <el-table :data="knowledge" border v-loading="knowledgeLoading" aria-label="知识库列表">
-          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column prop="id" label="编号" width="70" />
           <el-table-column prop="category" label="分类" width="120" />
           <el-table-column prop="question" label="问题" min-width="220" show-overflow-tooltip />
           <el-table-column prop="answer" label="答案" min-width="260" show-overflow-tooltip />
@@ -467,7 +467,7 @@ onMounted(() => {
           </el-select>
         </el-form-item>
         <el-form-item label="买家标识" required>
-          <el-input v-model="newForm.buyerRef" placeholder="如 用户 openId / 订单号" aria-label="买家标识" />
+          <el-input v-model="newForm.buyerRef" placeholder="如用户标识 / 订单号" aria-label="买家标识" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -481,10 +481,10 @@ onMounted(() => {
       <el-form label-width="80px" @submit.prevent>
         <el-form-item label="分类" required>
           <el-select v-model="knForm.category" style="width: 100%" aria-label="知识分类">
-            <el-option label="商品 product" value="product" />
-            <el-option label="订单 order" value="order" />
-            <el-option label="物流 logistics" value="logistics" />
-            <el-option label="常见问题 faq" value="faq" />
+            <el-option label="商品" value="product" />
+            <el-option label="订单" value="order" />
+            <el-option label="物流" value="logistics" />
+            <el-option label="常见问题" value="faq" />
           </el-select>
         </el-form-item>
         <el-form-item label="问题" required>

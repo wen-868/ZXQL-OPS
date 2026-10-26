@@ -10,6 +10,7 @@ import {
   type WorkflowStreamEvent,
 } from '@/api/workflow'
 import { formatDateTime } from '@/utils/format'
+import { currentTenantId } from '@/utils/tenant'
 import {
   nodeTypeMeta,
   triggerMeta,
@@ -103,19 +104,54 @@ async function startRun(defId?: number) {
   }
 }
 
-async function connectStream(runId: number) {
-  const tenantId = localStorage.getItem('tenantId') || 't_dev'
-  const url = `/api/ops/workflow-runs/${runId}/stream`
-  const resp = await fetch(url, { headers: { tenantId } })
-  if (!resp.ok || !resp.body) {
-    ElMessage.error(`SSE 连接失败（HTTP ${resp.status}）`)
-    streaming.value = false
-    return
+/** SSE 终态集合（命中即停止订阅） */
+const TERMINAL_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'partial']
+
+/** 解析单行 SSE data 负载；非 data 行或解析失败返回 null */
+function parseStreamLine(raw: string): WorkflowStreamEvent | null {
+  const line = raw.trim()
+  if (!line.startsWith('data:')) return null
+  const jsonStr = line.slice(line.indexOf('data:') + 5).trim()
+  if (!jsonStr) return null
+  try {
+    return JSON.parse(jsonStr) as WorkflowStreamEvent
+  } catch {
+    // 容错：解析失败行跳过
+    return null
   }
-  reader = resp.body.getReader()
-  const decoder = new TextDecoder()
+}
+
+/** 应用流事件到监控状态；命中终态返回 true 供外层停止订阅 */
+function applyStreamEvent(evt: WorkflowStreamEvent): boolean {
+  if (evt.run) {
+    streamStatus.value = evt.run.status
+    streamProgress.value = evt.run.progress
+  }
+  if (Array.isArray(evt.logs)) {
+    nodeLogs.value = evt.logs
+  }
+  if (evt.run && TERMINAL_STATUSES.includes(evt.run.status)) {
+    monitorHint.value = `运行结束：${runStatusMeta[evt.run.status]?.label || evt.run.status}`
+    return true
+  }
+  return false
+}
+
+/** SSE 请求头：原生 fetch 不走 axios 拦截器，须显式携带 JWT + 租户 */
+function streamHeaders(): Record<string, string> {
+  const token = localStorage.getItem('ops_token') || ''
+  return {
+    tenantId: currentTenantId(),
+    authorization: token ? `Bearer ${token}` : '',
+  }
+}
+
+/** 消费 SSE 流：逐行解析并应用事件；命中终态停止订阅 */
+async function consumeStream(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+): Promise<void> {
   let buffer = ''
-  const TERMINAL: WorkflowRunStatus[] = ['success', 'failed', 'partial']
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -125,26 +161,9 @@ async function connectStream(runId: number) {
       // 保留最后一段（可能不完整）到 buffer
       buffer = lines.pop() ?? ''
       for (const raw of lines) {
-        const line = raw.trim()
-        if (!line.startsWith('data:')) continue
-        const jsonStr = line.slice(line.indexOf('data:') + 5).trim()
-        if (!jsonStr) continue
-        let evt: WorkflowStreamEvent
-        try {
-          evt = JSON.parse(jsonStr)
-        } catch {
-          // 容错：解析失败行跳过
-          continue
-        }
-        if (evt.run) {
-          streamStatus.value = evt.run.status
-          streamProgress.value = evt.run.progress
-        }
-        if (Array.isArray(evt.logs)) {
-          nodeLogs.value = evt.logs
-        }
-        if (evt.run && TERMINAL.includes(evt.run.status)) {
-          monitorHint.value = `运行结束：${runStatusMeta[evt.run.status]?.label || evt.run.status}`
+        const evt = parseStreamLine(raw)
+        if (!evt) continue
+        if (applyStreamEvent(evt)) {
           await reader.cancel()
           streaming.value = false
           return
@@ -153,6 +172,21 @@ async function connectStream(runId: number) {
     }
   } catch {
     monitorHint.value = 'SSE 读取中断'
+  }
+}
+
+async function connectStream(runId: number) {
+  const resp = await fetch(`/api/ops/workflow-runs/${runId}/stream`, {
+    headers: streamHeaders(),
+  })
+  if (!resp.ok || !resp.body) {
+    ElMessage.error(`SSE 连接失败（HTTP ${resp.status}）`)
+    streaming.value = false
+    return
+  }
+  reader = resp.body.getReader()
+  try {
+    await consumeStream(reader, new TextDecoder())
   } finally {
     streaming.value = false
     reader = null
@@ -182,12 +216,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="L 工作流编排">
+  <div class="page-container" aria-label="工作流编排">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">L·工作流编排</h1>
-        <p class="page-subtitle">串联 C/D/E/F/I 等模块服务，支持复杂 DAG 编排、运行监控与 SSE 实时日志</p>
+        <h1 class="page-title">工作流编排</h1>
+        <p class="page-subtitle">串联各模块服务，支持复杂流程编排、运行监控与实时日志</p>
       </div>
     </div>
 

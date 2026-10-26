@@ -162,11 +162,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="H 智能成片">
+  <div class="page-container" aria-label="智能成片">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">H·智能成片</h1>
+        <h1 class="page-title">智能成片</h1>
         <p class="page-subtitle">脚本转成片、本地 FFmpeg 合成、合规预检送审，自研剪辑不依赖第三方</p>
       </div>
     </div>
@@ -236,26 +236,26 @@ onMounted(() => {
         />
         <el-card shadow="never" class="form-card">
           <el-form label-width="130px" @submit.prevent>
-            <el-form-item label="脚本 ID" required>
+            <el-form-item label="脚本编号" required>
               <el-input
                 v-model.number="genForm.scriptId"
                 type="number"
                 placeholder="必填，关联脚本编号"
                 style="width: 240px"
-                aria-label="脚本id"
+                aria-label="脚本编号"
                 clearable
               />
             </el-form-item>
-            <el-form-item label="素材 IDs">
+            <el-form-item label="素材编号列表">
               <el-input
                 v-model="genForm.materialIds"
                 placeholder="可选，逗号分隔，如 11,12,13"
                 style="width: 320px"
-                aria-label="素材id列表"
+                aria-label="素材编号列表"
                 clearable
               />
             </el-form-item>
-            <el-form-item label="比例 ratio">
+            <el-form-item label="比例">
               <el-select
                 v-model="genForm.ratio"
                 placeholder="可选"
@@ -266,7 +266,7 @@ onMounted(() => {
                 <el-option v-for="opt in ratioOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
-            <el-form-item label="标题 title">
+            <el-form-item label="标题">
               <el-input
                 v-model="genForm.title"
                 placeholder="可选"
@@ -300,7 +300,7 @@ onMounted(() => {
             <div v-if="genResult.url">
               <a :href="genResult.url" target="_blank" rel="noopener">{{ genResult.url }}</a>
             </div>
-            <div v-else class="placeholder-hint">MinIO 占位地址，本地 FFmpeg best-effort 合成</div>
+            <div v-else class="placeholder-hint">存储占位地址，本地剪辑工具合成</div>
           </div>
           <div v-if="genResult.scriptId" class="res-block">脚本 #{{ genResult.scriptId }}</div>
           <div v-if="genResult.ratio" class="res-block">比例：{{ genResult.ratio }}</div>
@@ -324,26 +324,26 @@ onMounted(() => {
         />
         <el-card shadow="never" class="form-card">
           <el-form label-width="130px" @submit.prevent>
-            <el-form-item label="视频 ID" required>
+            <el-form-item label="视频编号" required>
               <el-input
                 v-model.number="editForm.videoId"
                 type="number"
                 placeholder="必填，待编辑/送审成片编号"
                 style="width: 240px"
-                aria-label="视频id"
+                aria-label="视频编号"
                 clearable
               />
             </el-form-item>
-            <el-form-item label="素材 IDs">
+            <el-form-item label="素材编号列表">
               <el-input
                 v-model="editForm.materialIds"
                 placeholder="可选，逗号分隔"
                 style="width: 320px"
-                aria-label="编辑素材id列表"
+                aria-label="编辑素材编号列表"
                 clearable
               />
             </el-form-item>
-            <el-form-item label="比例 ratio">
+            <el-form-item label="比例">
               <el-select
                 v-model="editForm.ratio"
                 placeholder="可选"

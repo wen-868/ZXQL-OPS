@@ -18,6 +18,9 @@ uploads/
 *.log
 *.pid
 .history/
+*.rdb
+*.aof
+*.dump
 
 # ===== 第三方工具与数据库 =====
 tools/
@@ -45,3 +48,4 @@ installer-bundle/
 # ===== AI 工具缓存 =====
 .codebuddy/
 .zxology/
+.mimosa/

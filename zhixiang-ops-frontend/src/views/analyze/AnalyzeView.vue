@@ -174,11 +174,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="D 人性分析与洞察">
+  <div class="page-container" aria-label="人性分析与洞察">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">D·人性分析</h1>
+        <h1 class="page-title">人性分析</h1>
         <p class="page-subtitle">7×6 人性情绪聚类分析，基于脱敏评论生成洞察结论，驱动选题与脚本创作</p>
       </div>
     </div>
@@ -195,7 +195,7 @@ onBeforeUnmount(() => {
               </el-select>
             </el-form-item>
             <el-form-item label="平台">
-              <el-input v-model="taskForm.platform" placeholder="可选，如 douyin" size="default" style="width:160px" aria-label="平台" clearable />
+              <el-input v-model="taskForm.platform" placeholder="可选，如抖音平台码" size="default" style="width:160px" aria-label="平台" clearable />
             </el-form-item>
             <el-form-item label="评论上限">
               <el-input-number v-model="taskForm.commentLimit" :min="1" :max="5000" controls-position="right" size="default" style="width:130px" aria-label="评论上限" />
@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
         <el-empty v-if="!currentTask" description="暂无分析任务，先发起一个吧" />
         <div v-else class="card">
           <el-descriptions :column="3" border>
-            <el-descriptions-item label="任务ID">{{ currentTask.id }}</el-descriptions-item>
+            <el-descriptions-item label="任务编号">{{ currentTask.id }}</el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="analysisStatusMeta[currentTask.status].type" size="small">{{ analysisStatusMeta[currentTask.status].label }}</el-tag>
             </el-descriptions-item>
@@ -233,7 +233,7 @@ onBeforeUnmount(() => {
           <template #empty>
             <el-empty description="暂无历史任务" />
           </template>
-          <el-table-column prop="id" label="任务ID" width="90" />
+          <el-table-column prop="id" label="任务编号" width="90" />
           <el-table-column prop="source" label="数据源" width="90">
             <template #default="{ row }">{{ sourceOptions.find((s) => s.value === row.source)?.label || row.source }}</template>
           </el-table-column>
@@ -261,7 +261,7 @@ onBeforeUnmount(() => {
         <template #label><span aria-label="分析报告标签页">分析报告</span></template>
         <el-empty v-if="!reportLoading && !report" description="先发起分析任务，生成报告后在此查看" />
         <div v-else v-loading="reportLoading" class="report-wrap">
-          <el-alert type="info" :closable="false" show-icon class="compliance-alert" title="聚合洞察结论，由 clean 评论脱敏后汇总得出，不留存单条个人信息。" />
+          <el-alert type="info" :closable="false" show-icon class="compliance-alert" title="聚合洞察结论，由清洗后评论脱敏汇总得出，不留存单条个人信息。" />
           <!-- 人性分布 -->
           <div class="section-header"><h3 class="section-title">人性分布</h3></div>
           <div class="bar-list">

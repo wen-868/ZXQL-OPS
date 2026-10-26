@@ -72,26 +72,41 @@ function proxyRequest(targetUrl, req, res) {
   req.pipe(proxy);
 }
 
-/** 静态文件服务（带路径穿越防护与 SPA fallback） */
-function serveStatic(res, filePath, fallback) {
-  if (!filePath.startsWith(ROOT) && !filePath.startsWith(path.resolve(OPS_APP))) {
-    res.writeHead(403);
-    res.end('Forbidden');
-    return;
-  }
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
+/**
+ * 静态文件服务（带路径穿越防护与 SPA fallback）。
+ * candidates：有序候选文件列表，按序尝试（门户目录 → 运营前端产物，兼容 /assets 绝对路径资源）。
+ * allowedRoots：本组候选允许的根目录白名单（只读白名单，禁止发布根目录整体可读）。
+ * fallback：全部缺失时回退的 SPA 入口（如运营前端 index.html）。
+ */
+function serveStatic(res, candidates, fallback, allowedRoots) {
+  const tryNext = (i) => {
+    if (i >= candidates.length) {
       if (fallback) {
-        serveStatic(res, fallback, null);
+        serveStatic(res, [fallback], null, allowedRoots);
         return;
       }
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end('Not found: ' + filePath);
+      res.end('Not found');
       return;
     }
-    res.writeHead(200, { 'content-type': MIME[path.extname(filePath)] || 'application/octet-stream' });
-    res.end(data);
-  });
+    const filePath = path.resolve(candidates[i]);
+    if (!allowedRoots.some((root) => filePath.startsWith(root))) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        tryNext(i + 1);
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': MIME[path.extname(filePath)] || 'application/octet-stream',
+      });
+      res.end(data);
+    });
+  };
+  tryNext(0);
 }
 
 const server = http.createServer((req, res) => {
@@ -110,30 +125,58 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // —— 运营前端构建产物（SPA）——
+// —— 运营前端构建产物（SPA）——
   if (u.pathname === '/ops-app' || u.pathname.startsWith('/ops-app/')) {
     const rel = u.pathname.replace(/^\/ops-app/, '') || '/';
     const filePath = path.join(OPS_APP, rel);
-    serveStatic(res, filePath, path.join(OPS_APP, 'index.html'));
+    serveStatic(res, [filePath], path.join(OPS_APP, 'index.html'), [path.resolve(OPS_APP)]);
     return;
   }
 
-  // —— 门户与看板 ——
-  if (u.pathname === '/' || u.pathname === '/portal') {
-    serveStatic(res, path.join(ROOT, 'portal.html'), null);
+  // —— favicon：无图标文件，返回 204 避免浏览器 404 报错 ——
+  if (u.pathname === '/favicon.ico') {
+    res.writeHead(204);
+    res.end();
     return;
   }
+
+  // —— 默认入口：直达运营系统（不做管理系统登录界面）——
+  if (u.pathname === '/') {
+    res.writeHead(302, { location: '/ops-app/' });
+    res.end();
+    return;
+  }
+  // —— 看板（运营决策看板）——
   if (u.pathname === '/dashboard') {
-    serveStatic(res, path.join(ROOT, 'index.html'), null);
+    serveStatic(res, [path.join(ROOT, 'index.html')], null, [path.resolve(ROOT)]);
     return;
   }
 
-  // —— 其余静态（portal.css / portal.js / vendor / favicon 等）——
+  // —— 其余静态：仅门户自身文件（portal.*、vendor/*）与运营前端资源 ——
+  // 白名单收窄：不再把发布根目录整体暴露（backend/.env、tools/mariadb 数据、logs 不可下载）
   const rel = u.pathname === '/' ? '/index.html' : u.pathname;
-  serveStatic(res, path.join(ROOT, rel), null);
+  const hasExt = path.extname(rel).length > 0;
+  const isPortalFile =
+    rel === '/index.html' ||
+    rel === '/portal.html' ||
+    rel === '/portal.css' ||
+    rel === '/portal.js' ||
+    rel.startsWith('/vendor/');
+  if (isPortalFile) {
+    serveStatic(res, [path.join(ROOT, rel)], null, [path.resolve(ROOT)]);
+    return;
+  }
+  // 无扩展名的路径按 SPA 路由处理：资源缺失时回退运营前端入口（避免刷新 404）
+  serveStatic(
+    res,
+    [path.join(OPS_APP, rel)],
+    hasExt ? null : path.join(OPS_APP, 'index.html'),
+    [path.resolve(OPS_APP)],
+  );
 });
 
-server.listen(PORT, () => {
+// 仅绑定本机回环地址：服务与数据只对本机开放，不暴露给局域网
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`统一门户已启动: http://localhost:${PORT}`);
   console.log(`运营后端代理: ${BACKEND}`);
   console.log(`管理系统代理: ${MS_API}`);

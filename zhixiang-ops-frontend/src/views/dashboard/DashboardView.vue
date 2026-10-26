@@ -48,7 +48,8 @@ const cardList = computed(() =>
 )
 
 function formatCard(value: number, kind: 'money' | 'rate' | 'count' | 'int'): string {
-  if (kind === 'money' || kind === 'count') return formatAmount(value)
+  if (kind === 'count') return formatAmount(value, { prefix: '', digits: 0 })
+  if (kind === 'money') return formatAmount(value)
   if (kind === 'rate') return `${value.toFixed(2)}%`
   return String(value)
 }
@@ -190,11 +191,11 @@ function openEditCfg(d: DashboardConfig) {
 }
 async function saveCfg() {
   if (!cfgForm.name.trim()) return ElMessage.warning('看板名称必填')
-  let widgets: unknown = []
+  let widgets: unknown
   try {
     widgets = JSON.parse(cfgForm.widgetsText.trim())
   } catch {
-    return ElMessage.error('widgets 不是合法 JSON')
+    return ElMessage.error('组件配置不是合法 JSON')
   }
   cfgSubmitting.value = true
   try {
@@ -229,15 +230,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="dashboard-view" aria-label="M 决策看板">
+  <section class="dashboard-view" aria-label="决策看板">
     <el-alert
       type="info"
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="M 决策看板：核心指标卡 / 全链路漏斗 / 账号对比 / 选题效能 / 人性钩子矩阵 / 看板配置；tenantId 由统一拦截器注入。"
+      title="决策看板：核心指标卡 / 全链路漏斗 / 账号对比 / 选题效能 / 人性钩子矩阵 / 看板配置；租户标识由统一拦截器注入。"
     />
-    <el-tabs v-model="activeTab" type="border-card" aria-label="M 功能分区">
+    <el-tabs v-model="activeTab" type="border-card" aria-label="功能分区">
       <!-- ===== 1. 经营概览 ===== -->
       <el-tab-pane name="overview">
         <template #label><span aria-label="经营概览标签页">经营概览</span></template>
@@ -289,7 +290,7 @@ onMounted(() => {
           <el-button type="primary" @click="loadAccounts" :loading="accountLoading" aria-label="加载账号对比">加载账号对比</el-button>
         </div>
         <el-table v-if="accounts" :data="accounts.accounts" border aria-label="账号对比">
-          <el-table-column prop="accountId" label="账号ID" width="90" />
+          <el-table-column prop="accountId" label="账号编号" width="90" />
           <el-table-column prop="nickname" label="昵称" min-width="140" />
           <el-table-column prop="platform" label="平台" width="110" />
           <el-table-column prop="fansCount" label="粉丝" width="110" />
@@ -348,7 +349,7 @@ onMounted(() => {
           <el-button @click="loadDashboards" :loading="dashLoading" aria-label="刷新看板列表">刷新</el-button>
         </div>
         <el-table :data="dashboards" border v-loading="dashLoading" aria-label="看板配置列表">
-          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="id" label="编号" width="80" />
           <el-table-column prop="name" label="看板名称" min-width="200" />
           <el-table-column label="组件数" width="100">
             <template #default="{ row }">{{ ((row as DashboardConfig).widgets || []).length }}</template>
@@ -370,13 +371,13 @@ onMounted(() => {
         <el-form-item label="名称" required>
           <el-input v-model="cfgForm.name" aria-label="看板名称" />
         </el-form-item>
-        <el-form-item label="widgets">
+        <el-form-item label="组件配置">
           <el-input
             v-model="cfgForm.widgetsText"
             type="textarea"
             :rows="8"
             placeholder='JSON 数组，如 [{"type":"kpi","metric":"gmv"}]'
-            aria-label="看板widgets"
+            aria-label="看板组件"
           />
         </el-form-item>
       </el-form>

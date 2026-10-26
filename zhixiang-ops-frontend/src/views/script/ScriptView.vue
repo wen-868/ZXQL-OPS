@@ -270,11 +270,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="F 脚本工坊">
+  <div class="page-container" aria-label="脚本工坊">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">F·脚本工坊</h1>
+        <h1 class="page-title">脚本工坊</h1>
         <p class="page-subtitle">消费选题智能生成脚本，合规预检与版本管理，驱动发布与分发</p>
       </div>
     </div>
@@ -381,13 +381,13 @@ onMounted(() => {
             <template #default="{ row }">
               <el-button link type="primary" size="small" @click="openEdit(row as Script)">编辑</el-button>
               <el-button link type="warning" size="small" :loading="checkSubmitting[(row as Script).id]" @click="handleRowCheck(row as Script)">合规预检</el-button>
-              <el-button link type="success" size="small" :loading="saveSubmitting[(row as Script).id]" @click="handleVersionSave(row as Script)">版本save</el-button>
+              <el-button link type="success" size="small" :loading="saveSubmitting[(row as Script).id]" @click="handleVersionSave(row as Script)">版本保存</el-button>
               <el-popover placement="top" :width="260" trigger="click">
                 <template #reference>
                   <el-button link type="info" size="small">版本回滚</el-button>
                 </template>
                 <div class="rollback-box">
-                  <el-input v-model.number="rollbackTarget[(row as Script).id]" type="number" placeholder="目标版本 id" style="width:100%" aria-label="回滚目标版本id" />
+                  <el-input v-model.number="rollbackTarget[(row as Script).id]" type="number" placeholder="目标版本编号" style="width:100%" aria-label="回滚目标版本编号" />
                   <el-button type="primary" size="small" style="margin-top:8px" :loading="rollbackSubmitting[(row as Script).id]" @click="handleVersionRollback(row as Script)">确认回滚</el-button>
                 </div>
               </el-popover>
@@ -425,8 +425,8 @@ onMounted(() => {
         <template #label><span aria-label="合规预检台标签页">合规预检台</span></template>
         <div class="card">
           <el-form label-width="90px" @submit.prevent>
-            <el-form-item label="脚本ID">
-              <el-input v-model.number="deskScriptId" type="number" placeholder="目标脚本 id" style="width:220px" aria-label="预检脚本id" clearable />
+            <el-form-item label="脚本编号">
+              <el-input v-model.number="deskScriptId" type="number" placeholder="目标脚本编号" style="width:220px" aria-label="预检脚本编号" clearable />
             </el-form-item>
             <el-form-item label="自定义文本">
               <el-input v-model="deskText" type="textarea" :rows="5" placeholder="可选，留空则对脚本当前内容预检" aria-label="预检自定义文本" />

@@ -197,12 +197,12 @@ async function handleSubmit() {
           />
         </el-select>
       </el-form-item>
-      <el-form-item v-if="form.trigger === 'cron'" label="cron 表达式" required>
+      <el-form-item v-if="form.trigger === 'cron'" label="定时表达式" required>
         <el-input
           v-model="form.cronExpr"
           placeholder="如：0 0 12 * * *"
           style="width: 100%"
-          aria-label="cron表达式"
+          aria-label="定时表达式"
           clearable
         />
       </el-form-item>
@@ -214,7 +214,7 @@ async function handleSubmit() {
         :closable="false"
         show-icon
         class="chain-hint"
-        title="阶段1 线性链：所选节点按 C→D→E→F→I→J 顺序自动连成 n1→n2→…；复杂 DAG 由后端校验。"
+        title="阶段1 线性链：所选节点按固定顺序自动连成；复杂流程由后端校验。"
       />
     </el-form>
     <template #footer>

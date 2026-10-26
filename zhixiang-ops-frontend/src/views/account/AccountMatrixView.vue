@@ -159,12 +159,12 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div class="page-container" aria-label="B 账号矩阵">
+  <div class="page-container" aria-label="账号矩阵">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">B·账号矩阵</h1>
-        <p class="page-subtitle">管理多平台矩阵账号，实时监控账号健康状态与Token有效性</p>
+        <h1 class="page-title">账号矩阵</h1>
+        <p class="page-subtitle">管理多平台矩阵账号，实时监控账号健康状态与令牌有效性</p>
       </div>
       <el-button type="primary" @click="openCreate">+ 新建账号</el-button>
     </div>
@@ -217,7 +217,7 @@ onMounted(loadAll)
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
-          <el-input v-model="filters.keyword" placeholder="昵称/账号ID" clearable size="default" style="width:180px" aria-label="关键词搜索" @keyup.enter="handleSearch" />
+          <el-input v-model="filters.keyword" placeholder="昵称/账号编号" clearable size="default" style="width:180px" aria-label="关键词搜索" @keyup.enter="handleSearch" />
         </el-form-item>
       </el-form>
       <div class="filter-actions">
@@ -250,7 +250,7 @@ onMounted(loadAll)
             {{ platformLabels[row.platform as keyof typeof platformLabels] }}
           </template>
         </el-table-column>
-        <el-table-column prop="platformAccountId" label="平台账号ID" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="platformAccountId" label="平台账号编号" min-width="160" show-overflow-tooltip />
         <el-table-column prop="identity" label="身份" width="90">
           <template #default="{ row }">
             {{ identityLabels[row.identity as keyof typeof identityLabels] || '-' }}
@@ -309,10 +309,10 @@ onMounted(loadAll)
     <!-- 详情抽屉 -->
     <el-drawer v-model="detailVisible" title="账号详情" size="480px" destroy-on-close aria-label="账号详情">
       <el-descriptions v-if="detail" :column="1" border>
-        <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
+        <el-descriptions-item label="编号">{{ detail.id }}</el-descriptions-item>
         <el-descriptions-item label="昵称">{{ detail.nickname || '-' }}</el-descriptions-item>
         <el-descriptions-item label="平台">{{ platformLabels[detail.platform] }}</el-descriptions-item>
-        <el-descriptions-item label="平台账号ID">{{ detail.platformAccountId }}</el-descriptions-item>
+        <el-descriptions-item label="平台账号编号">{{ detail.platformAccountId }}</el-descriptions-item>
         <el-descriptions-item label="身份">{{ identityLabels[detail.identity || 'matrix'] }}</el-descriptions-item>
         <el-descriptions-item label="赛道">{{ detail.track || '-' }}</el-descriptions-item>
         <el-descriptions-item label="阶段">{{ stageLabels[detail.stage || 'nurturing'] }}</el-descriptions-item>
@@ -324,7 +324,7 @@ onMounted(loadAll)
         <el-descriptions-item label="粉丝数">{{ formatCount(detail.fansCount) }}</el-descriptions-item>
         <el-descriptions-item label="关注数">{{ formatCount(detail.followCount) }}</el-descriptions-item>
         <el-descriptions-item label="获赞数">{{ formatCount(detail.likeCount) }}</el-descriptions-item>
-        <el-descriptions-item label="Token过期">{{ formatDateTime(detail.tokenExpireAt) }}</el-descriptions-item>
+        <el-descriptions-item label="令牌过期">{{ formatDateTime(detail.tokenExpireAt) }}</el-descriptions-item>
         <el-descriptions-item label="最后同步">{{ formatDateTime(detail.lastSyncAt) }}</el-descriptions-item>
         <el-descriptions-item label="最后活跃">{{ formatDateTime(detail.lastActiveAt) }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ formatDateTime(detail.createdAt) }}</el-descriptions-item>

@@ -95,10 +95,10 @@ export function updateVideo(id: number, dto: UpdateVideoDto) {
   return request.put(`/ops/overseas/videos/${id}`, dto).then((r) => r.data as OverseasVideo)
 }
 export function listTasks(params: { page?: number; pageSize?: number }) {
-  return request.get('/ops/overseas/tasks', { params }).then((r) => r.data as PageResult<TranslationTask>)
+  return request.get('/ops/overseas/translation-tasks', { params }).then((r) => r.data as PageResult<TranslationTask>)
 }
 export function createTask(dto: CreateTaskDto) {
-  return request.post('/ops/overseas/tasks', dto).then((r) => r.data as TranslationTask)
+  return request.post('/ops/overseas/translation-tasks', dto).then((r) => r.data as TranslationTask)
 }
 export function getSummary() {
   return request.get('/ops/overseas/summary').then((r) => r.data as OverseasSummary)

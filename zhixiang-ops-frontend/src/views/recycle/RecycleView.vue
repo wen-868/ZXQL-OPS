@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { onBeforeUnmount, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+
+/** 平台 → 中文显示（值保持平台码，仅展示中文化） */
+function platformLabel(p: string): string {
+  const map: Record<string, string> = {
+    douyin: '抖音',
+    wechat: '微信',
+    kuaishou: '快手',
+    xiaohongshu: '小红书',
+    bilibili: 'B站',
+    'wechat-channels': '视频号',
+  }
+  return map[p] ?? p
+}
 import {
   createRecycle,
   getRecycle,
@@ -173,11 +186,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="J 数据监控与回收">
+  <div class="page-container" aria-label="数据监控与回收">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1 class="page-title">L·数据回收</h1>
+        <h1 class="page-title">数据回收</h1>
         <p class="page-subtitle">回收发布表现数据与五维指标，回流 D 人性分析形成闭环</p>
       </div>
     </div>
@@ -188,7 +201,7 @@ onBeforeUnmount(() => {
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="仅存聚合表现与回收评论文本（已脱敏），不留存单条个人信息；attributionId 由 I 透传（F→I→J 只读），禁止重生成。"
+      title="仅存聚合表现与回收评论文本（已脱敏），不留存单条个人信息；归因标识由发布模块透传（脚本→发布→回收只读），禁止重生成。"
     />
 
     <!-- 功能分区 -->
@@ -260,7 +273,7 @@ onBeforeUnmount(() => {
             v-loading="tasksLoading"
             aria-label="回收任务列表"
           >
-            <el-table-column prop="id" label="ID" width="90" />
+            <el-table-column prop="id" label="编号" width="90" />
             <el-table-column label="范围" width="100">
               <template #default="{ row }">
                 <el-tag :type="recycleScopeMeta[(row.scope as RecycleScope)]?.type || 'info'" size="small">
@@ -300,17 +313,17 @@ onBeforeUnmount(() => {
             placeholder="输入视频/发布任务 id"
             style="width: 280px"
             size="default"
-            aria-label="视频 id"
+            aria-label="视频编号"
             @keyup.enter="loadFeedback"
           />
           <el-button type="primary" :loading="feedbackLoading" @click="loadFeedback" aria-label="查询明细">查询</el-button>
         </div>
-        <el-empty v-if="!feedbackLoading && !feedbackData" description="输入视频 id 查询回收明细" />
+        <el-empty v-if="!feedbackLoading && !feedbackData" description="输入视频编号查询回收明细" />
         <div v-else-if="feedbackData" class="card" v-loading="feedbackLoading">
           <div class="fb-head">
             <span class="fb-head-title">反馈 #{{ feedbackData.feedback.id }}</span>
             <el-tag v-if="feedbackData.feedback.platform" size="small" type="info">
-              {{ feedbackData.feedback.platform }}
+              {{ platformLabel(feedbackData.feedback.platform) }}
             </el-tag>
             <el-tag size="small" type="warning">归因 {{ feedbackData.feedback.attributionId }}</el-tag>
           </div>
@@ -368,8 +381,8 @@ onBeforeUnmount(() => {
           <span class="rerun-hint">将回收评论注入 D 人性分析形成闭环</span>
         </div>
         <div v-if="rerunResult" class="card rerun-result-card">
-          <div>分析实例 analysisId：<b>{{ rerunResult.analysisId }}</b></div>
-          <div>注入反馈数 feedbackCount：<b>{{ rerunResult.feedbackCount }}</b></div>
+          <div>分析实例编号：<b>{{ rerunResult.analysisId }}</b></div>
+          <div>注入反馈数：<b>{{ rerunResult.feedbackCount }}</b></div>
           <div class="rerun-trace">traceId：{{ rerunResult.traceId }}</div>
           <el-alert
             type="success"

@@ -297,12 +297,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="T 选品中心">
+  <div class="page-container" aria-label="选品中心">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">T·选品中心</h1>
-        <p class="page-subtitle">选品库 / 榜单 / 蓝海词 / 清单，humanDriver 对齐 D 人性字典；关键写操作落审计</p>
+        <h1 class="page-title">选品中心</h1>
+        <p class="page-subtitle">选品库 / 榜单 / 蓝海词 / 清单，人性驱动对齐人性字典；关键写操作落审计</p>
       </div>
     </div>
 
@@ -377,7 +377,7 @@ onMounted(() => {
       <el-tab-pane label="导入选品">
         <template #label><span aria-label="导入选品标签页">导入选品</span></template>
         <el-alert type="warning" :closable="false" show-icon class="hint-alert"
-          title="standalone 模式直接填写下方 products；connected 对接模式可传 ids 经平台 API 批量拉取（当前独立模式不支持）。" />
+          title="独立模式直接填写下方商品；对接模式可传编号经平台接口批量拉取（当前独立模式不支持）。" />
         <el-form :model="importForm" label-width="80px" class="import-form">
           <el-form-item label="来源" required>
             <el-select v-model="importForm.source" :options="selectionSourceOptions as any" placeholder="选择来源" style="width: 240px" aria-label="选品来源">
@@ -446,7 +446,7 @@ onMounted(() => {
         <template #label><span aria-label="飙升榜标签页">飙升榜</span></template>
         <div v-loading="hotLoading" class="hot-wrap">
           <div class="hot-col">
-            <h4 class="hot-title">飙升榜（销量 Top）</h4>
+            <h4 class="hot-title">飙升榜（销量领先）</h4>
             <el-empty v-if="!surging.length" description="暂无飙升商品" />
             <el-card v-for="it in surging" :key="'s' + it.id" shadow="hover" class="hot-card">
               <div class="hot-row"><b>{{ it.title }}</b></div>

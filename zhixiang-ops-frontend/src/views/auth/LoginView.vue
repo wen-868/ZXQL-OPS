@@ -17,8 +17,8 @@ const demoLoading = ref(false)
 const status = ref<SystemStatus | null>(null)
 
 const form = reactive({
-  username: '',
-  password: '',
+  username: 'demo',
+  password: 'Demo@123456',
   realName: '',
 })
 
@@ -30,9 +30,9 @@ onMounted(async () => {
   }
 })
 
-async function enter(result: { token: string; user: LoginResult['user'] }) {
-  appStore.setAuth(result.token, result.user)
-  const redirect = (route.query.redirect as string) || '/accounts'
+async function enter(result: { token: string; user: LoginResult['user']; csrfToken?: string }) {
+  appStore.setAuth(result.token, result.user, result.csrfToken)
+  const redirect = (route.query.redirect as string) || '/home'
   router.replace(redirect)
 }
 
@@ -73,7 +73,8 @@ async function handleDemoLogin() {
 
 function toggleMode() {
   isRegistering.value = !isRegistering.value
-  form.password = ''
+  form.password = isRegistering.value ? '' : 'Demo@123456'
+  if (!isRegistering.value && !form.username) form.username = 'demo'
 }
 </script>
 
@@ -131,8 +132,9 @@ function toggleMode() {
         </el-button>
 
         <!-- 演示登录：免账号密码一键进入（仅演示模式开启时显示） -->
+        <p class="demo-hint">演示帐号：<code>demo</code> / <code>Demo@123456</code></p>
         <el-button
-          v-if="status?.demoMode"
+          v-if="status?.demoMode !== false"
           size="large"
           class="submit-btn demo-btn"
           :icon="MagicStick"
@@ -235,6 +237,20 @@ function toggleMode() {
 }
 
 /* 演示登录按钮：次要描边样式，与主导航按钮区分 */
+.demo-hint {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--app-neutral-500);
+  text-align: center;
+}
+.demo-hint code {
+  font-family: var(--font-mono);
+  color: var(--app-brand-600);
+  background: var(--app-brand-50);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
 .demo-btn {
   margin-top: var(--space-2);              /* 8px */
   color: var(--app-brand-600);

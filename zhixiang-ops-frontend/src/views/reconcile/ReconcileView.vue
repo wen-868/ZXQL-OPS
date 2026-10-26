@@ -29,6 +29,20 @@ const sourceLabels: Record<RevenueSource, string> = {
 }
 const statusLabels: Record<RevenueStatus, string> = { pending: '待结算', settled: '已结算' }
 
+/** 对账状态 → 中文显示 */
+const reconcileStatusLabels: Record<string, string> = {
+  pending: '待对账',
+  matched: '已匹配',
+  diff_found: '存在差异',
+}
+
+/** 结算状态 → 中文显示 */
+const settlementStatusLabels: Record<string, string> = {
+  pending: '待结算',
+  settled: '已结算',
+  invoiced: '已开票',
+}
+
 // ============ Tab 1. 收益记录 ============
 const revenue = ref<RevenueRecordView[]>([])
 const summary = ref<RevenueListView['summary']>([])
@@ -182,15 +196,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="reconcile-view" aria-label="W 收益与对账中心">
+  <section class="reconcile-view" aria-label="收益与对账中心">
     <el-alert
       type="info"
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="W 收益与对账中心：收益归集（按佣金/坑位费/服务费/打赏/补贴）/ 周期对账 / 机构-达人-投手分账 / 利润透视；tenantId 由统一拦截器注入。"
+      title="收益与对账中心：收益归集（按佣金/坑位费/服务费/打赏/补贴）/ 周期对账 / 机构-达人-投手分账 / 利润透视；租户标识由统一拦截器注入。"
     />
-    <el-tabs v-model="activeTab" type="border-card" aria-label="W 功能分区">
+    <el-tabs v-model="activeTab" type="border-card" aria-label="功能分区">
       <!-- ===== 1. 收益记录 ===== -->
       <el-tab-pane name="revenue">
         <template #label><span aria-label="收益记录标签页">收益记录</span></template>
@@ -229,7 +243,7 @@ onMounted(() => {
           <el-table-column prop="count" label="笔数" width="100" />
         </el-table>
         <el-table :data="revenue" border v-loading="revenueLoading" class="sub-table" aria-label="收益明细">
-          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column prop="id" label="编号" width="70" />
           <el-table-column label="类型" width="100">
             <template #default="{ row }">{{ sourceLabels[(row as RevenueRecordView).source] || (row as RevenueRecordView).source }}</template>
           </el-table-column>
@@ -255,7 +269,7 @@ onMounted(() => {
       <el-tab-pane name="reconcile">
         <template #label><span aria-label="对账与分账标签页">对账与分账</span></template>
         <div class="filter-bar" aria-label="对账操作栏">
-          <el-input v-model="reconcilePeriod" placeholder="账期 YYYY-MM" style="width: 160px" aria-label="对账账期" />
+          <el-input v-model="reconcilePeriod" placeholder="账期 年-月" style="width: 160px" aria-label="对账账期" />
           <el-button type="primary" :loading="reconciling" @click="doReconcile" aria-label="生成对账">生成对账</el-button>
           <el-button @click="openSettle" aria-label="发起分账">发起分账</el-button>
         </div>
@@ -266,13 +280,13 @@ onMounted(() => {
             <el-descriptions-item label="佣金金额">{{ formatAmount(currentReconcile.commissionAmount) }}</el-descriptions-item>
             <el-descriptions-item label="已结算金额">{{ formatAmount(currentReconcile.settledAmount) }}</el-descriptions-item>
             <el-descriptions-item label="差异">{{ formatAmount(currentReconcile.diff) }}</el-descriptions-item>
-            <el-descriptions-item label="状态">{{ currentReconcile.status }}</el-descriptions-item>
+            <el-descriptions-item label="状态">{{ reconcileStatusLabels[currentReconcile.status] || currentReconcile.status }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
         <el-card v-if="currentSettlement" shadow="never" class="block-card" aria-label="分账结果">
           <template #header>
             <div class="card-head">
-              <span>分账单 #{{ currentSettlement.id }}（状态：{{ currentSettlement.status }}）</span>
+              <span>分账单 #{{ currentSettlement.id }}（状态：{{ settlementStatusLabels[currentSettlement.status] || currentSettlement.status }}）</span>
               <el-button
                 v-if="currentSettlement.status !== 'invoiced'"
                 type="success"
@@ -342,8 +356,8 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="revForm.status" clearable placeholder="可选（默认 pending）" style="width: 100%" aria-label="收益状态">
-            <el-option label="待结算 pending" value="pending" />
-            <el-option label="已结算 settled" value="settled" />
+            <el-option label="待结算" value="pending" />
+            <el-option label="已结算" value="settled" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -362,9 +376,9 @@ onMounted(() => {
         <el-divider>分账参与方</el-divider>
         <div v-for="(p, idx) in settlementParties" :key="idx" class="party-row">
           <el-select v-model="p.role" style="width: 150px" aria-label="分账角色">
-            <el-option label="机构 org" value="org" />
-            <el-option label="达人 talent" value="talent" />
-            <el-option label="投手 ad_operator" value="ad_operator" />
+            <el-option label="机构" value="org" />
+            <el-option label="达人" value="talent" />
+            <el-option label="投手" value="ad_operator" />
           </el-select>
           <el-input v-model="p.name" placeholder="参与方名称" style="width: 150px" aria-label="参与方名称" />
           <el-input v-model.number="p.amount" type="number" placeholder="金额" style="width: 130px" aria-label="分账金额" />

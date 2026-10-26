@@ -170,7 +170,14 @@
     }
 
     async function api(path) {
-      const res = await fetch(API + path, { headers: { 'x-tenant-id': tenant() } });
+      const headers = { 'x-tenant-id': tenant() };
+      const token = localStorage.getItem('ops_token');
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(API + path, { headers });
+      if (res.status === 401) {
+        setStatus('未登录：请先在运营系统登录（http://localhost:8080/ops-app），登录后刷新本页', 'err');
+        throw new Error('UNAUTHORIZED');
+      }
       const json = await res.json();
       if (!res.ok || json.code !== '0') {
         throw new Error(json.msg || ('HTTP ' + res.status));
@@ -271,8 +278,8 @@
       if (!items.length) { emptyState('topics'); return; }
       const rows = items.slice(0, 12).map((it) => `
         <tr>
-          <td><span class="badge">${it.driver}</span></td>
-          <td><span class="badge">${it.emotion}</span></td>
+          <td><span class="badge">${esc(it.driver)}</span></td>
+          <td><span class="badge">${esc(it.emotion)}</span></td>
           <td class="r">${it.topicCount}</td>
           <td class="r">${it.avgScore}</td>
           <td class="r">${fmt(it.avgPlay)}</td>
@@ -329,7 +336,7 @@
       const rows = list.slice(0, 12).map((o) => `<tr>
         <td>${esc(o.advertiser || '-')}</td>
         <td class="r">¥${fmt(o.amount)}</td>
-        <td><span class="badge">${o.status}</span></td>
+        <td><span class="badge">${esc(o.status)}</span></td>
         <td class="r">${o.talentShareRate}%</td>
         <td>${o.settlementId ? '✅ 已分账' : '—'}</td>
       </tr>`).join('');
@@ -352,8 +359,8 @@
       if (!list || !list.length) { emptyState('overseasVideos', '暂无出海视频（需先有 H 成片）'); return; }
       const rows = list.slice(0, 12).map((v) => `<tr>
         <td>${esc(v.title || '-')}</td>
-        <td>${v.targetLang}</td>
-        <td><span class="badge">${v.status}</span></td>
+        <td>${esc(v.targetLang)}</td>
+        <td><span class="badge">${esc(v.status)}</span></td>
         <td>${v.url ? '🔗 已发布' : '—'}</td>
       </tr>`).join('');
       el.innerHTML = `<table><thead><tr><th>标题</th><th>目标语言</th><th>状态</th><th>外链</th></tr></thead><tbody>${rows}</tbody></table>`;

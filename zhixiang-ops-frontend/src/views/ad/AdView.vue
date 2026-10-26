@@ -15,6 +15,7 @@ import {
   type AdPlatform,
   type AdAccountType,
   type AdPlanType,
+  type ReportMetricPayload,
 } from '@/api/ad'
 import { formatDateTime, formatAmount } from '@/utils/format'
 import {
@@ -121,39 +122,43 @@ function openCreateCampaign() {
   campaignDialog.value = true
 }
 
-async function confirmCreateCampaign() {
-  if (campaignForm.accountId == null) {
-    ElMessage.warning('账户必填')
-    return
-  }
-  if (!campaignForm.name.trim()) {
-    ElMessage.warning('计划名称必填')
-    return
-  }
-  if (!campaignForm.planType) {
-    ElMessage.warning('计划类型必填')
-    return
-  }
-  // audience 文本域：填入后需为合法 JSON 对象
-  let audience: Record<string, unknown> | undefined
-  if (campaignForm.audience.trim()) {
-    try {
-      const parsed = JSON.parse(campaignForm.audience.trim())
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        throw new Error('audience 需为 JSON 对象')
-      }
-      audience = parsed as Record<string, unknown>
-    } catch {
-      ElMessage.error('audience 不是合法 JSON 对象，请检查格式')
-      return
+/** 投放计划必填校验：返回错误文案；合法返回 null */
+function validateCampaignForm(): string | null {
+  if (campaignForm.accountId == null) return '账户必填'
+  if (!campaignForm.name.trim()) return '计划名称必填'
+  if (!campaignForm.planType) return '计划类型必填'
+  return null
+}
+
+/** 解析 audience 文本域：空串 → undefined（不传）；合法 JSON 对象 → 对象；否则 → null（已提示错误） */
+function parseAudienceField(raw: string): Record<string, unknown> | null | undefined {
+  if (!raw.trim()) return undefined
+  try {
+    const parsed = JSON.parse(raw.trim())
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('audience 需为 JSON 对象')
     }
+    return parsed as Record<string, unknown>
+  } catch {
+    ElMessage.error('audience 不是合法 JSON 对象，请检查格式')
+    return null
   }
+}
+
+async function confirmCreateCampaign() {
+  const invalid = validateCampaignForm()
+  if (invalid) {
+    ElMessage.warning(invalid)
+    return
+  }
+  const audience = parseAudienceField(campaignForm.audience)
+  if (audience === null) return
   campaignSubmitting.value = true
   try {
     const camp = await createCampaign({
-      accountId: campaignForm.accountId,
+      accountId: campaignForm.accountId as number,
       name: campaignForm.name.trim(),
-      planType: campaignForm.planType,
+      planType: campaignForm.planType as AdPlanType,
       audience,
       budget: campaignForm.budget ?? undefined,
     })
@@ -286,19 +291,24 @@ function openReport(row: AdCampaignView) {
   reportDialog.value = true
 }
 
+/** 组装指标上报负载：空值转 undefined 由后端取默认 */
+function buildReportPayload(campaignId: number): ReportMetricPayload {
+  return {
+    campaignId, // 会被路径 id 覆盖/忽略
+    date: reportForm.date.trim() || undefined,
+    impressions: reportForm.impressions ?? undefined,
+    clicks: reportForm.clicks ?? undefined,
+    conversions: reportForm.conversions ?? undefined,
+    cost: reportForm.cost ?? undefined,
+    roi: reportForm.roi ?? undefined,
+  }
+}
+
 async function confirmReport() {
   if (!reportTarget.value) return
   reportSubmitting.value = true
   try {
-    const res = await reportMetric(reportTarget.value.id, {
-      campaignId: reportTarget.value.id, // 会被路径 id 覆盖/忽略
-      date: reportForm.date.trim() || undefined,
-      impressions: reportForm.impressions ?? undefined,
-      clicks: reportForm.clicks ?? undefined,
-      conversions: reportForm.conversions ?? undefined,
-      cost: reportForm.cost ?? undefined,
-      roi: reportForm.roi ?? undefined,
-    })
+    const res = await reportMetric(reportTarget.value.id, buildReportPayload(reportTarget.value.id))
     reportResult.value = res
     ElMessage.success('指标已上报')
     // 备注：后端 reportMetric 会回写 campaign 的 spend/roi，但前端无 getCampaign 端点，
@@ -312,11 +322,11 @@ async function confirmReport() {
 </script>
 
 <template>
-  <div class="page-container" aria-label="S 投流中心">
+  <div class="page-container" aria-label="投流中心">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div class="page-header-text">
-        <h1 class="page-title">T·广告投放</h1>
+        <h1 class="page-title">广告投放</h1>
         <p class="page-subtitle">投放账户与计划管理，实时监控、智能出价、复盘与指标上报</p>
       </div>
     </div>
@@ -327,11 +337,11 @@ async function confirmReport() {
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="S 投流中心：投放账户 / 计划管理、实时监控、智能出价、复盘与指标上报；tenantId 由统一拦截器注入。"
+      title="投流中心：投放账户 / 计划管理、实时监控、智能出价、复盘与指标上报；租户标识由统一拦截器注入。"
     />
 
     <!-- 功能分区 -->
-    <el-tabs v-model="activeTab" type="border-card" aria-label="S 投流功能分区">
+    <el-tabs v-model="activeTab" type="border-card" aria-label="投流功能分区">
       <!-- ===== 1. 投放账户 ===== -->
       <el-tab-pane name="accounts">
         <template #label><span aria-label="投放账户标签页">投放账户</span></template>
@@ -341,7 +351,7 @@ async function confirmReport() {
         </div>
         <div class="card">
           <el-table :data="accounts" stripe v-loading="accountsLoading" aria-label="投放账户列表">
-            <el-table-column prop="id" label="ID" width="80" />
+            <el-table-column prop="id" label="编号" width="80" />
             <el-table-column label="平台" width="100">
               <template #default="{ row }">
                 <el-tag
@@ -382,8 +392,8 @@ async function confirmReport() {
         </div>
         <div class="card">
           <el-table :data="campaigns" stripe v-loading="campaignsLoading" aria-label="投放计划列表">
-            <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="accountId" label="账户ID" width="90" />
+            <el-table-column prop="id" label="编号" width="80" />
+            <el-table-column prop="accountId" label="账户编号" width="90" />
             <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
             <el-table-column label="计划类型" width="100">
               <template #default="{ row }">
@@ -399,10 +409,10 @@ async function confirmReport() {
             <el-table-column label="已消耗" width="110">
               <template #default="{ row }">{{ formatAmount((row as AdCampaignView).spend) }}</template>
             </el-table-column>
-            <el-table-column label="ROI" width="90">
+            <el-table-column label="投产比" width="90">
               <template #default="{ row }">{{ (row as AdCampaignView).roi }}</template>
             </el-table-column>
-            <el-table-column prop="attributionId" label="attributionId" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="attributionId" label="归因标识" min-width="160" show-overflow-tooltip />
             <el-table-column label="状态" width="100">
               <template #default="{ row }">
                 <el-tag size="small" :type="adCampaignStatusMeta[(row as AdCampaignView).status].type">
@@ -442,7 +452,7 @@ async function confirmReport() {
           </el-select>
         </el-form-item>
         <el-form-item label="授权加密串">
-          <el-input v-model="accountForm.authEnc" placeholder="authEnc（可选）" aria-label="授权加密串authEnc" />
+          <el-input v-model="accountForm.authEnc" placeholder="授权加密串（可选）" aria-label="授权加密串" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="accountForm.status" placeholder="正常" style="width: 100%" aria-label="账户状态">
@@ -488,8 +498,8 @@ async function confirmReport() {
             v-model="campaignForm.audience"
             type="textarea"
             :rows="3"
-            placeholder="受众 JSON 对象（可选），如 {&quot;age&quot;:&quot;18-24&quot;}"
-            aria-label="人群定向JSON"
+            placeholder="受众配置对象（可选），如 {&quot;age&quot;:&quot;18-24&quot;}"
+            aria-label="人群定向配置"
           />
         </el-form-item>
         <el-form-item label="预算">
@@ -514,7 +524,7 @@ async function confirmReport() {
           <el-descriptions-item label="点击">{{ metricData.clicks }}</el-descriptions-item>
           <el-descriptions-item label="转化">{{ metricData.conversions }}</el-descriptions-item>
           <el-descriptions-item label="消耗">{{ formatAmount(metricData.cost) }}</el-descriptions-item>
-          <el-descriptions-item label="ROI">{{ metricData.roi }}</el-descriptions-item>
+          <el-descriptions-item label="投产比">{{ metricData.roi }}</el-descriptions-item>
         </el-descriptions>
         <el-empty v-else :image-size="60" description="暂无数据" />
       </div>
@@ -530,8 +540,8 @@ async function confirmReport() {
         <el-form-item label="计划">
           <span v-if="bidTarget">#{{ bidTarget.id }} · {{ bidTarget.name }}</span>
         </el-form-item>
-        <el-form-item label="目标 ROI">
-          <el-input v-model.number="bidForm.targetRoi" type="number" placeholder="≥0（可选）" aria-label="目标ROI" />
+        <el-form-item label="目标投产比">
+          <el-input v-model.number="bidForm.targetRoi" type="number" placeholder="≥0（可选）" aria-label="目标投产比" />
         </el-form-item>
         <el-form-item label="出价调整">
           <el-input v-model.number="bidForm.bidAdjust" type="number" placeholder="≥0（可选）" aria-label="出价调整" />
@@ -554,11 +564,11 @@ async function confirmReport() {
       </div>
       <div v-loading="reviewLoading" class="metric-body">
         <el-descriptions :column="2" border size="small" v-if="reviewData">
-          <el-descriptions-item label="attributionId" :span="2">{{ reviewData.attributionId }}</el-descriptions-item>
-          <el-descriptions-item label="总消耗(spend)">{{ formatAmount(reviewData.totalSpend) }}</el-descriptions-item>
-          <el-descriptions-item label="总成本(cost)">{{ formatAmount(reviewData.totalCost) }}</el-descriptions-item>
+          <el-descriptions-item label="归因标识" :span="2">{{ reviewData.attributionId }}</el-descriptions-item>
+          <el-descriptions-item label="总消耗">{{ formatAmount(reviewData.totalSpend) }}</el-descriptions-item>
+          <el-descriptions-item label="总成本">{{ formatAmount(reviewData.totalCost) }}</el-descriptions-item>
           <el-descriptions-item label="总转化">{{ reviewData.totalConversions }}</el-descriptions-item>
-          <el-descriptions-item label="ROI">{{ reviewData.roi }}</el-descriptions-item>
+          <el-descriptions-item label="投产比">{{ reviewData.roi }}</el-descriptions-item>
           <el-descriptions-item label="指标条数" :span="2">{{ reviewData.metricsCount }}</el-descriptions-item>
         </el-descriptions>
         <el-empty v-else :image-size="60" description="暂无复盘数据" />
@@ -576,7 +586,7 @@ async function confirmReport() {
           <span v-if="reportTarget">#{{ reportTarget.id }} · {{ reportTarget.name }}</span>
         </el-form-item>
         <el-form-item label="日期">
-          <el-input v-model="reportForm.date" placeholder="YYYY-MM-DD（可选）" aria-label="指标日期" />
+          <el-input v-model="reportForm.date" placeholder="年-月-日（可选）" aria-label="指标日期" />
         </el-form-item>
         <el-form-item label="曝光">
           <el-input v-model.number="reportForm.impressions" type="number" placeholder="≥0，默认 0" aria-label="曝光" />
@@ -590,8 +600,8 @@ async function confirmReport() {
         <el-form-item label="消耗">
           <el-input v-model.number="reportForm.cost" type="number" placeholder="≥0，默认 0" aria-label="消耗" />
         </el-form-item>
-        <el-form-item label="ROI">
-          <el-input v-model.number="reportForm.roi" type="number" placeholder="默认 0" aria-label="ROI" />
+        <el-form-item label="投产比">
+          <el-input v-model.number="reportForm.roi" type="number" placeholder="默认 0" aria-label="投产比" />
         </el-form-item>
       </el-form>
       <div v-if="reportResult" class="bid-result" v-loading="reportSubmitting">
@@ -602,7 +612,7 @@ async function confirmReport() {
           <el-descriptions-item label="点击">{{ reportResult.clicks }}</el-descriptions-item>
           <el-descriptions-item label="转化">{{ reportResult.conversions }}</el-descriptions-item>
           <el-descriptions-item label="消耗">{{ formatAmount(reportResult.cost) }}</el-descriptions-item>
-          <el-descriptions-item label="ROI">{{ reportResult.roi }}</el-descriptions-item>
+          <el-descriptions-item label="投产比">{{ reportResult.roi }}</el-descriptions-item>
         </el-descriptions>
       </div>
       <template #footer>

@@ -1,6 +1,19 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+
+/** 平台 → 中文显示（值保持平台码，仅展示中文化） */
+function platformLabel(p: string): string {
+  const map: Record<string, string> = {
+    douyin: '抖音',
+    wechat: '微信',
+    kuaishou: '快手',
+    xiaohongshu: '小红书',
+    bilibili: 'B站',
+    'wechat-channels': '视频号',
+  }
+  return map[p] ?? p
+}
 import {
   upsertFans,
   listFans,
@@ -91,6 +104,18 @@ function openCreateFan() {
   fanDialog.value = true
 }
 
+/** 组装粉丝画像负载：空 source/tags 转 undefined 由后端取默认 */
+function buildFanPayload(tags: string[], interactAgg: Record<string, unknown> | undefined) {
+  return {
+    platform: fanForm.platform.trim(),
+    publicId: fanForm.publicId.trim(),
+    level: fanForm.level.trim() || 'normal',
+    source: fanForm.source ? (fanForm.source as FansSource) : undefined,
+    interactAgg,
+    tags: tags.length ? tags : undefined,
+  }
+}
+
 async function confirmCreateFan() {
   if (!fanForm.platform.trim()) {
     ElMessage.warning('平台必填')
@@ -100,21 +125,9 @@ async function confirmCreateFan() {
     ElMessage.warning('公开ID必填')
     return
   }
-  // interactAgg 文本域：填入后需为合法 JSON 对象
-  let interactAgg: Record<string, unknown> | undefined
-  if (fanForm.interactAgg.trim()) {
-    try {
-      const parsed = JSON.parse(fanForm.interactAgg.trim())
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        throw new Error('interactAgg 需为 JSON 对象')
-      }
-      interactAgg = parsed as Record<string, unknown>
-    } catch {
-      ElMessage.error('聚合分布不是合法 JSON 对象，请检查格式')
-      return
-    }
-  }
-  // tags：逗号/换行分隔转 string[]
+  // interactAgg 文本域：填入后需为合法 JSON 对象；tags 逗号/换行分隔转 string[]
+  const interactAgg = parseInteractAgg(fanForm.interactAgg)
+  if (interactAgg === null) return
   const tags = parseLines(fanForm.tags)
   if (tags === null) {
     ElMessage.error('标签解析失败，请检查格式（逗号或换行分隔）')
@@ -122,14 +135,7 @@ async function confirmCreateFan() {
   }
   fanSubmitting.value = true
   try {
-    await upsertFans({
-      platform: fanForm.platform.trim(),
-      publicId: fanForm.publicId.trim(),
-      level: fanForm.level.trim() || 'normal',
-      source: fanForm.source ? (fanForm.source as FansSource) : undefined,
-      interactAgg,
-      tags: tags.length ? tags : undefined,
-    })
+    await upsertFans(buildFanPayload(tags, interactAgg))
     ElMessage.success('粉丝画像已创建/更新')
     fanDialog.value = false
     await loadFans() // 刷新真实列表
@@ -137,6 +143,21 @@ async function confirmCreateFan() {
     // 拦截器已提示
   } finally {
     fanSubmitting.value = false
+  }
+}
+
+/** 解析交互聚合分布：空串 → undefined（不传）；合法 JSON 对象 → 对象；否则 → null（已提示错误） */
+function parseInteractAgg(raw: string): Record<string, unknown> | null | undefined {
+  if (!raw.trim()) return undefined
+  try {
+    const parsed = JSON.parse(raw.trim())
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('interactAgg 需为 JSON 对象')
+    }
+    return parsed as Record<string, unknown>
+  } catch {
+    ElMessage.error('聚合分布不是合法 JSON 对象，请检查格式')
+    return null
   }
 }
 
@@ -346,12 +367,12 @@ onMounted(() => {
     <!-- 页面标题区 -->
     <div class="page-header">
       <div class="page-header-left">
-        <h1 class="page-title">S · 私域用户</h1>
+        <h1 class="page-title">私域用户</h1>
         <p class="page-subtitle">粉丝画像 / 私域群 / 复购分销，沉淀用户资产并触达转化</p>
       </div>
     </div>
 
-    <el-tabs v-model="activeTab" class="card" aria-label="U 私域功能分区">
+    <el-tabs v-model="activeTab" class="card" aria-label="私域功能分区">
       <!-- ===== 1. 粉丝画像 ===== -->
       <el-tab-pane name="fans">
         <template #label><span aria-label="粉丝画像标签页">粉丝画像</span></template>
@@ -372,9 +393,9 @@ onMounted(() => {
           <el-button @click="loadFans" aria-label="刷新粉丝画像列表">刷新</el-button>
         </div>
         <el-table :data="fans" stripe v-loading="fansLoading" aria-label="粉丝画像列表" class="data-table">
-          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="id" label="编号" width="80" />
           <el-table-column prop="platform" label="平台" min-width="110" show-overflow-tooltip />
-          <el-table-column prop="publicId" label="公开ID" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="publicId" label="公开编号" min-width="150" show-overflow-tooltip />
           <el-table-column prop="level" label="层级" width="100" />
           <el-table-column label="来源" width="100">
             <template #default="{ row }">
@@ -424,7 +445,7 @@ onMounted(() => {
           <span class="filter-tip">说明：后端无群列表端点，本页仅维护本会话创建的私域群</span>
         </div>
         <el-table :data="groups" stripe v-loading="groupsLoading" aria-label="私域群列表" class="data-table">
-          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="id" label="编号" width="80" />
           <el-table-column prop="name" label="群名" min-width="150" show-overflow-tooltip />
           <el-table-column label="类型" width="100">
             <template #default="{ row }">
@@ -461,22 +482,22 @@ onMounted(() => {
             <div v-if="distributeResult" class="result-box" v-loading="distributeSubmitting">
               <el-descriptions :column="1" border size="small">
                 <el-descriptions-item label="计划名称">{{ distributeResult.planName }}</el-descriptions-item>
-                <el-descriptions-item label="分级层数(tiers)">{{ distributeResult.tiers }}</el-descriptions-item>
-                <el-descriptions-item label="佣金(commission)">{{ formatAmount(distributeResult.commission) }}</el-descriptions-item>
+                <el-descriptions-item label="分级层数">{{ distributeResult.tiers }}</el-descriptions-item>
+                <el-descriptions-item label="佣金">{{ formatAmount(distributeResult.commission) }}</el-descriptions-item>
               </el-descriptions>
             </div>
             <el-empty v-else :image-size="60" description="暂无分销结果，点击「新建分销」创建" />
           </div>
 
-          <div class="card repurchase-card" aria-label="复购CRM卡片">
+          <div class="card repurchase-card" aria-label="复购管理卡片">
             <div class="card-head">
-              <h3 class="card-head-title">复购 CRM</h3>
-              <el-button type="success" @click="openRepurchase" aria-label="新建复购CRM">新建复购</el-button>
+              <h3 class="card-head-title">复购管理</h3>
+              <el-button type="success" @click="openRepurchase" aria-label="新建复购">新建复购</el-button>
             </div>
             <div v-if="repurchaseResult" class="result-box" v-loading="repurchaseSubmitting">
               <el-descriptions :column="1" border size="small">
-                <el-descriptions-item label="公开ID">{{ repurchaseResult.publicId }}</el-descriptions-item>
-                <el-descriptions-item label="金额(amount)">{{ formatAmount(repurchaseResult.amount) }}</el-descriptions-item>
+                <el-descriptions-item label="公开编号">{{ repurchaseResult.publicId }}</el-descriptions-item>
+                <el-descriptions-item label="金额">{{ formatAmount(repurchaseResult.amount) }}</el-descriptions-item>
               </el-descriptions>
             </div>
             <el-empty v-else :image-size="60" description="暂无复购记录，点击「新建复购」创建" />
@@ -491,8 +512,8 @@ onMounted(() => {
         <el-form-item label="平台" required>
           <el-input v-model="fanForm.platform" placeholder="平台（必填）" aria-label="粉丝平台" />
         </el-form-item>
-        <el-form-item label="公开ID" required>
-          <el-input v-model="fanForm.publicId" placeholder="平台公开ID（必填，禁止个体隐私字段）" aria-label="粉丝公开ID" />
+        <el-form-item label="公开编号" required>
+          <el-input v-model="fanForm.publicId" placeholder="平台公开编号（必填，禁止个体隐私字段）" aria-label="粉丝公开编号" />
         </el-form-item>
         <el-form-item label="层级">
           <el-input v-model="fanForm.level" placeholder="默认 normal" aria-label="粉丝层级" />
@@ -507,8 +528,8 @@ onMounted(() => {
             v-model="fanForm.interactAgg"
             type="textarea"
             :rows="3"
-            placeholder="聚合交互分布 JSON 对象（可选），如 {&quot;like&quot;:120,&quot;comment&quot;:30}"
-            aria-label="聚合分布JSON"
+            placeholder="聚合交互分布配置对象（可选），如 {&quot;like&quot;:120,&quot;comment&quot;:30}"
+            aria-label="聚合分布配置"
           />
         </el-form-item>
         <el-form-item label="标签">
@@ -531,7 +552,7 @@ onMounted(() => {
     <el-dialog v-model="tagDialog" title="粉丝分层打标" aria-label="粉丝打标弹窗" width="480px">
       <el-form label-width="80px" @submit.prevent>
         <el-form-item label="目标">
-          <span v-if="tagTarget" class="target-info">#{{ tagTarget.id }} · {{ tagTarget.platform }} · {{ tagTarget.publicId }}</span>
+          <span v-if="tagTarget" class="target-info">#{{ tagTarget.id }} · {{ platformLabel(tagTarget.platform) }} · {{ tagTarget.publicId }}</span>
         </el-form-item>
         <el-form-item label="标签" required>
           <el-input
@@ -565,8 +586,8 @@ onMounted(() => {
             v-model="groupForm.members"
             type="textarea"
             :rows="3"
-            placeholder="逗号或换行分隔公开ID（可选）"
-            aria-label="私域群成员公开ID"
+            placeholder="逗号或换行分隔公开编号（可选）"
+            aria-label="私域群成员公开编号"
           />
         </el-form-item>
       </el-form>
@@ -579,13 +600,13 @@ onMounted(() => {
     <!-- 推客分销弹窗 -->
     <el-dialog v-model="distributeDialog" title="推客分销" aria-label="推客分销弹窗" width="520px">
       <el-form label-width="100px" @submit.prevent>
-        <el-form-item label="公开ID" required>
+        <el-form-item label="公开编号" required>
           <el-input
             v-model="distributeForm.publicIds"
             type="textarea"
             :rows="3"
-            placeholder="逗号或换行分隔公开ID（必填）"
-            aria-label="分销公开ID"
+            placeholder="逗号或换行分隔公开编号（必填）"
+            aria-label="分销公开编号"
           />
         </el-form-item>
         <el-form-item label="计划名称" required>
@@ -602,10 +623,10 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 复购 CRM 弹窗 -->
-    <el-dialog v-model="repurchaseDialog" title="复购 CRM" aria-label="复购CRM弹窗" width="520px">
+    <el-dialog v-model="repurchaseDialog" title="复购管理" aria-label="复购管理弹窗" width="520px">
       <el-form label-width="100px" @submit.prevent>
-        <el-form-item label="公开ID" required>
-          <el-input v-model="repurchaseForm.publicId" placeholder="平台公开ID（必填）" aria-label="复购公开ID" />
+        <el-form-item label="公开编号" required>
+          <el-input v-model="repurchaseForm.publicId" placeholder="平台公开编号（必填）" aria-label="复购公开编号" />
         </el-form-item>
         <el-form-item label="商品">
           <el-input

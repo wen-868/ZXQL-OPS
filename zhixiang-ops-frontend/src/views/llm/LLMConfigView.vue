@@ -19,7 +19,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="defaultModel" label="默认模型" min-width="140" />
-        <el-table-column label="API Key" width="130">
+        <el-table-column label="接口密钥" width="130">
           <template #default="{ row }">
             <span v-if="row.apiKeyMasked" class="masked">{{ row.apiKeyMasked }}</span>
             <span v-else class="muted">未配置</span>
@@ -61,16 +61,16 @@
         </el-form-item>
         <el-form-item label="类型" required>
           <el-select v-model="form.type" style="width: 100%">
-            <el-option label="Ollama（本地）" value="ollama" />
-            <el-option label="OpenAI 兼容" value="openai" />
-            <el-option label="Azure OpenAI" value="azure" />
+            <el-option label="本地模型" value="ollama" />
+            <el-option label="接口兼容" value="openai" />
+            <el-option label="微软云模型" value="azure" />
             <el-option label="自定义端点" value="custom" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Base URL" required>
+        <el-form-item label="基础地址" required>
           <el-input v-model="form.baseUrl" placeholder="http://127.0.0.1:11434" />
         </el-form-item>
-        <el-form-item label="API Key">
+        <el-form-item label="接口密钥">
           <el-input
             v-model="form.apiKey"
             type="password"
@@ -133,9 +133,9 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 
 const TYPE_MAP: Record<string, { label: string; tag: string }> = {
-  ollama: { label: 'Ollama', tag: 'warning' },
-  openai: { label: 'OpenAI', tag: 'success' },
-  azure: { label: 'Azure', tag: 'primary' },
+  ollama: { label: '本地模型', tag: 'warning' },
+  openai: { label: '通用接口', tag: 'success' },
+  azure: { label: '微软云', tag: 'primary' },
   custom: { label: '自定义', tag: 'info' },
 }
 const typeLabel = (t: string) => TYPE_MAP[t]?.label || t
@@ -198,13 +198,19 @@ async function handleDelete(row: LlmProvider) {
   ElMessage.success('已删除')
   await load()
 }
+/** 提取连接失败的可读信息：后端 msg 优先，回退 message/未知错误 */
+function errorMessage(e: unknown): string {
+  const err = e as { response?: { data?: { msg?: string } }; message?: string }
+  return err?.response?.data?.msg || err?.message || '未知错误'
+}
+
 async function handleTest(row: LlmProvider) {
   try {
     const r = await testProvider(row.id)
     if (r.ok) ElMessage.success(`连接成功（${row.name}）`)
     else ElMessage.error(`连接失败：${r.message}`)
   } catch (e: any) {
-    ElMessage.error(`连接失败：${e?.response?.data?.msg || e?.message || '未知错误'}`)
+    ElMessage.error(`连接失败：${errorMessage(e)}`)
   }
 }
 

@@ -180,15 +180,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="orders-view" aria-label="Y 订单物流中心">
+  <section class="orders-view" aria-label="订单物流中心">
     <el-alert
       type="info"
       :closable="false"
       show-icon
       class="compliance-alert"
-      title="Y 订单物流中心：双源订单同步 / 退款回写库存 / 物流轨迹 / 电子面单 / 库存预警回传；tenantId 由统一拦截器注入。"
+      title="订单物流中心：双源订单同步 / 退款回写库存 / 物流轨迹 / 电子面单 / 库存预警回传；租户标识由统一拦截器注入。"
     />
-    <el-tabs v-model="activeTab" type="border-card" aria-label="Y 功能分区">
+    <el-tabs v-model="activeTab" type="border-card" aria-label="功能分区">
       <!-- ===== 1. 订单列表 ===== -->
       <el-tab-pane name="orders">
         <template #label><span aria-label="订单列表标签页">订单列表</span></template>
@@ -204,11 +204,11 @@ onMounted(() => {
         </div>
         <el-table :data="orders" border v-loading="ordersLoading" aria-label="订单列表" @selection-change="(rows: OrderView[]) => (batchIds = rows.map((r) => r.id))">
           <el-table-column type="selection" width="46" />
-          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column prop="id" label="编号" width="70" />
           <el-table-column prop="orderId" label="订单号" min-width="150" show-overflow-tooltip />
           <el-table-column prop="platform" label="平台" width="110" />
           <el-table-column prop="source" label="来源" width="100" />
-          <el-table-column prop="productId" label="商品ID" width="90" />
+          <el-table-column prop="productId" label="商品编号" width="90" />
           <el-table-column prop="quantity" label="数量" width="80" />
           <el-table-column label="金额" min-width="110">
             <template #default="{ row }">{{ formatAmount((row as OrderView).amount) }}</template>
@@ -249,7 +249,7 @@ onMounted(() => {
           <el-button @click="openInv" aria-label="库存回传">库存回传</el-button>
         </div>
         <el-table :data="warns" border v-loading="warnLoading" aria-label="库存预警列表">
-          <el-table-column prop="id" label="商品ID" width="100" />
+          <el-table-column prop="id" label="商品编号" width="100" />
           <el-table-column prop="title" label="商品" min-width="200" show-overflow-tooltip />
           <el-table-column prop="stock" label="当前库存" width="120" />
         </el-table>
@@ -262,17 +262,17 @@ onMounted(() => {
       <el-form label-width="100px" @submit.prevent>
         <el-form-item label="来源">
           <el-select v-model="syncForm.source" clearable placeholder="可选（缺省由平台推断）" style="width: 100%" aria-label="同步来源">
-            <el-option label="管理系统 management" value="management" />
-            <el-option label="电商平台 platform" value="platform" />
+            <el-option label="管理系统" value="management" />
+            <el-option label="电商平台" value="platform" />
           </el-select>
         </el-form-item>
-        <el-form-item label="订单 JSON" required>
+        <el-form-item label="订单配置" required>
           <el-input
             v-model="syncForm.ordersText"
             type="textarea"
             :rows="10"
             placeholder='JSON 数组，如 [{"orderId":"P123","platform":"douyin","amount":99,"quantity":1,"status":"paid"}]'
-            aria-label="订单JSON"
+            aria-label="订单配置"
           />
         </el-form-item>
       </el-form>
@@ -301,10 +301,10 @@ onMounted(() => {
     <!-- 库存回传弹窗 -->
     <el-dialog v-model="invDialog" title="库存回传" aria-label="库存回传弹窗" width="520px">
       <el-form label-width="100px" @submit.prevent>
-        <el-form-item label="商品ID" required>
-          <el-input v-model.number="invForm.productId" type="number" aria-label="商品ID" />
+        <el-form-item label="商品编号" required>
+          <el-input v-model.number="invForm.productId" type="number" aria-label="商品编号" />
         </el-form-item>
-        <el-form-item label="变动(delta)" required>
+        <el-form-item label="变动数量" required>
           <el-input v-model.number="invForm.delta" type="number" placeholder="正=入库/回写，负=扣减" aria-label="库存变动" />
         </el-form-item>
         <el-form-item label="原因">

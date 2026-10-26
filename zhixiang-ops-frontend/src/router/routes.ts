@@ -14,6 +14,7 @@ const realPaths: Record<string, () => Promise<unknown>> = {
   '/videos': () => import('@/views/videos/VideoView.vue'),
   '/publish': () => import('@/views/publish/PublishView.vue'),
   '/workflows': () => import('@/views/workflow/WorkflowView.vue'),
+  '/automation': () => import('@/views/automation/AutomationView.vue'),
   '/recycle': () => import('@/views/recycle/RecycleView.vue'),
   '/selection': () => import('@/views/selection/SelectionView.vue'),
   '/products': () => import('@/views/products/ProductView.vue'),
@@ -24,6 +25,7 @@ const realPaths: Record<string, () => Promise<unknown>> = {
   '/orders': () => import('@/views/orders/OrdersView.vue'),
   '/cs': () => import('@/views/cs/CsView.vue'),
   '/dashboard': () => import('@/views/dashboard/DashboardView.vue'),
+  '/profile': () => import('@/views/profile/ProfileView.vue'),
   '/talent': () => import('@/views/talent/TalentView.vue'),
   '/global': () => import('@/views/overseas/OverseasView.vue'),
   '/roles': () => import('@/views/team/TeamView.vue'),
@@ -33,6 +35,7 @@ const realPaths: Record<string, () => Promise<unknown>> = {
   '/employees': () => import('@/views/employee/EmployeeView.vue'),
   '/system-init': () => import('@/views/system/SystemInitView.vue'),
   '/integration': () => import('@/views/integration/IntegrationView.vue'),
+  '/browser-workbench': () => import('@/views/workspace/BrowserWorkspaceView.vue'),
 }
 
 // 真实页路由
@@ -68,7 +71,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: BasicLayout,
-    redirect: '/accounts',
+    redirect: '/home',
     children: [
       // 首页工作台（聚合统计 + 快捷入口）
       {
@@ -83,7 +86,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/accounts',
+    redirect: '/home',
   },
 ]
 

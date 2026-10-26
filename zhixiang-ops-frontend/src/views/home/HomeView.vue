@@ -1,43 +1,201 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  UserFilled, Document, Picture, VideoCamera, Promotion,
-  Collection, DataAnalysis,
-} from '@element-plus/icons-vue'
-import { getDashboardStats, type DashboardStats } from '@/api/dashboard'
-import { useAppStore } from '@/stores/app'
+  createDashboard,
+  deleteDashboard,
+  getDashboardStats,
+  getDashboardTodos,
+  getDashboardTrend,
+  listDashboards,
+  type DashboardStats,
+  type DashboardTodoItem,
+} from '@/api/dashboard'
 
 const router = useRouter()
-const appStore = useAppStore()
 const loading = ref(false)
 const stats = ref<DashboardStats>({
-  accounts: 0, scripts: 0, materials: 0, videos: 0,
-  publishes: 0, topics: 0, intels: 0,
+  accounts: 0,
+  scripts: 0,
+  materials: 0,
+  videos: 0,
+  publishes: 0,
+  topics: 0,
+  intels: 0,
+  liveOnline: 0,
+  todayOrders: 0,
+  pendingTickets: 0,
+  pendingReviews: 0,
 })
 
-const userName = appStore.user?.realName || '用户'
-
+// 总览卡片组（与 UI 原型一致）
 const statCards = [
-  { key: 'accounts', label: '账号', icon: UserFilled },
-  { key: 'intels', label: '情报', icon: DataAnalysis },
-  { key: 'topics', label: '选题', icon: Collection },
-  { key: 'scripts', label: '脚本', icon: Document },
-  { key: 'materials', label: '素材', icon: Picture },
-  { key: 'videos', label: '成片', icon: VideoCamera },
-  { key: 'publishes', label: '发布', icon: Promotion },
+  { key: 'topics', label: '选题库' },
+  { key: 'scripts', label: '待拍脚本' },
+  { key: 'liveOnline', label: '直播在线' },
+  { key: 'todayOrders', label: '今日订单' },
+  { key: 'pendingTickets', label: '待审工单' },
+  { key: 'pendingReviews', label: '待复盘' },
 ] as const
 
-const quickActions = [
-  { label: '账号矩阵', path: '/accounts', desc: '管理多平台运营账号' },
-  { label: '情报采集', path: '/intel', desc: '热点追踪与趋势分析' },
-  { label: '选题策划', path: '/topic', desc: '选题库与灵感管理' },
-  { label: '脚本创作', path: '/script', desc: 'AI 辅助脚本生成' },
-  { label: '素材中心', path: '/materials', desc: '素材上传与管理' },
-  { label: '视频成片', path: '/videos', desc: '智能视频合成' },
-  { label: '发布管理', path: '/publish', desc: '一键多平台发布' },
-  { label: '工作流', path: '/workflows', desc: '自动化流程编排' },
-]
+// ===== 可视化布局调整：卡片显隐即时生效（localStorage 持久化），可另存为看板配置 =====
+const editMode = ref(false)
+const HIDDEN_KEY = 'ops_home_hidden_cards'
+function loadHidden(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]')
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+const hiddenCards = ref<string[]>(loadHidden())
+const visibleCards = computed(() => statCards.filter((c) => !hiddenCards.value.includes(c.key)))
+function persistHidden() {
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenCards.value))
+}
+function toggleCard(key: string) {
+  if (!editMode.value) return
+  const list = hiddenCards.value
+  const idx = list.indexOf(key)
+  if (idx >= 0) list.splice(idx, 1)
+  else if (list.length < statCards.length - 1) list.push(key) // 至少保留 1 张卡
+  else ElMessage.info('至少保留一张卡片')
+  persistHidden()
+}
+
+// ===== 看板配置（后端 ops/dashboard/configs 持久化，可跨设备） =====
+interface SavedConfig {
+  id: number
+  name: string
+  widgets: string[]
+}
+const savedConfigs = ref<SavedConfig[]>([])
+const activeConfigId = ref<number | null>(null)
+
+async function loadConfigs() {
+  try {
+    const list = await listDashboards()
+    savedConfigs.value = list.map((c) => ({
+      id: Number(c.id),
+      name: c.name,
+      widgets: Array.isArray(c.widgets) ? (c.widgets as string[]).filter((x) => typeof x === 'string') : [],
+    }))
+  } catch {
+    // 后端不可用时下拉为空，布局调整仍可用（localStorage）
+  }
+}
+
+async function onSaveConfig() {
+  try {
+    const { value } = await ElMessageBox.prompt('给当前布局起个名字', '保存看板配置', {
+      inputValue: activeConfigId.value ? savedConfigs.value.find((c) => c.id === activeConfigId.value)?.name : '',
+      inputPattern: /\S+/,
+      inputErrorMessage: '名称不能为空',
+    })
+    const widgets = statCards.filter((c) => !hiddenCards.value.includes(c.key)).map((c) => c.key)
+    if (activeConfigId.value) {
+      const target = savedConfigs.value.find((c) => c.id === activeConfigId.value)
+      if (target) {
+        const { updateDashboard } = await import('@/api/dashboard')
+        await updateDashboard(activeConfigId.value, { name: value, widgets })
+        target.name = value
+        target.widgets = widgets
+        ElMessage.success('看板配置已更新')
+        return
+      }
+    }
+    const created = await createDashboard({ name: value, widgets })
+    savedConfigs.value.push({ id: Number(created.id), name: created.name, widgets })
+    activeConfigId.value = Number(created.id)
+    ElMessage.success('看板配置已保存')
+  } catch {
+    // 用户取消或保存失败（失败已由拦截器提示）
+  }
+}
+
+function onApplyConfig(id: number | null) {
+  activeConfigId.value = id
+  const target = savedConfigs.value.find((c) => c.id === id)
+  if (!target) return
+  // 配置里存的 key 集合 = 显示集合；反推隐藏集合，立即生效
+  hiddenCards.value = statCards.filter((c) => !target.widgets.includes(c.key)).map((c) => c.key)
+  persistHidden()
+  ElMessage.success(`已应用「${target.name}」`)
+}
+
+async function onDeleteConfig() {
+  if (!activeConfigId.value) return
+  const target = savedConfigs.value.find((c) => c.id === activeConfigId.value)
+  if (!target) return
+  try {
+    await ElMessageBox.confirm(`删除看板配置「${target.name}」？`, '删除确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deleteDashboard(activeConfigId.value)
+    savedConfigs.value = savedConfigs.value.filter((c) => c.id !== activeConfigId.value)
+    activeConfigId.value = null
+    ElMessage.success('已删除')
+  } catch {
+    // 拦截器已提示
+  }
+}
+
+// ===== 订单/投流趋势（真实数据；天数可切换） =====
+const TREND_CHOICES = [7, 10, 14, 30] as const
+const trendDays = ref<number>(10)
+const chartData = ref<number[]>([])
+const chartDates = ref<string[]>([])
+
+async function loadTrend(days: number) {
+  trendDays.value = days
+  try {
+    const trend = await getDashboardTrend(days)
+    chartData.value = trend.days.map((d) => d.orders)
+    chartDates.value = trend.days.map((d) => d.date)
+  } catch {
+    // 静默降级（保持当前数据）
+  }
+}
+
+// 待办：彩色图标盒（26×26、圆角 7、14px 图标、色块背景），点击进入对应模块
+// 数据来自 /ops/dashboard/todos 聚合；接口失败时保持数量 0（不展示假数据）
+const TODO_META: Record<DashboardTodoItem['type'], { label: string; path: string; color: string; icon: string }> = {
+  publish: {
+    label: '发布审核',
+    path: '/publish',
+    color: '#3b82f6',
+    icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/>',
+  },
+  cs: {
+    label: '高风客诉',
+    path: '/cs',
+    color: '#f59e0b',
+    icon: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  },
+  reconcile: {
+    label: '对账差异',
+    path: '/reconcile',
+    color: '#22c55e',
+    icon: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+  },
+  ad: {
+    label: '待启投流',
+    path: '/ad',
+    color: '#ef4444',
+    icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  },
+}
+const todoItems = ref(
+  (Object.keys(TODO_META) as Array<DashboardTodoItem['type']>).map((type) => ({
+    type,
+    count: 0,
+    ...TODO_META[type],
+  })),
+)
 
 onMounted(async () => {
   loading.value = true
@@ -48,253 +206,414 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  void loadTrend(trendDays.value)
+  // 待办聚合（失败保持 0）
+  try {
+    const todos = await getDashboardTodos()
+    todoItems.value = todos.list.map((t) => ({ type: t.type, count: t.count, ...TODO_META[t.type] }))
+  } catch {
+    // 静默降级
+  }
+  // 已保存的看板配置
+  void loadConfigs()
 })
 </script>
 
 <template>
   <div class="home-page">
-    <!-- 欢迎区 -->
-    <div class="welcome-banner">
-      <h1 class="welcome-title">
-        你好，{{ userName }}
-      </h1>
-      <p class="welcome-desc">欢迎使用智享全链运营系统，今日运营数据一览</p>
-    </div>
-
-    <!-- 统计卡片 -->
-    <div class="stats-grid">
-      <div
-        v-for="card in statCards"
-        :key="card.key"
-        class="stat-card"
-        :data-key="card.key"
-      >
-        <!-- 加载态：骨架脉冲动画 -->
-        <template v-if="loading">
-          <div class="stat-icon-skeleton skeleton" />
-          <div class="stat-body">
-            <div class="stat-value-skeleton skeleton" />
-            <div class="stat-label-skeleton skeleton" />
-          </div>
-        </template>
-        <!-- 正常态 -->
-        <template v-else>
-          <div class="stat-icon">
-            <el-icon :size="22"><component :is="card.icon" /></el-icon>
-          </div>
-          <div class="stat-body">
-            <span class="stat-value">{{ (stats as any)[card.key] }}</span>
-            <span class="stat-label">{{ card.label }}</span>
-          </div>
-        </template>
+    <div class="ov-head">
+      <div class="ov-title">运营总览 · 实时</div>
+      <div class="config-bar">
+        <span class="cfg-label">看板</span>
+        <select
+          class="cfg-select"
+          :value="activeConfigId ?? ''"
+          aria-label="选择看板配置"
+          @change="onApplyConfig(Number(($event.target as HTMLSelectElement).value) || null)"
+        >
+          <option :value="''">默认布局</option>
+          <option v-for="c in savedConfigs" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <button type="button" class="cfg-btn" @click="onSaveConfig">
+          {{ activeConfigId ? '更新配置' : '保存当前布局' }}
+        </button>
+        <button
+          v-if="activeConfigId"
+          type="button"
+          class="cfg-btn danger"
+          @click="onDeleteConfig"
+        >
+          删除
+        </button>
       </div>
     </div>
 
-    <!-- 快捷入口 -->
-    <h2 class="section-title">快捷入口</h2>
-    <div class="quick-actions">
-      <button
-        v-for="action in quickActions"
-        :key="action.path"
-        class="action-card"
-        type="button"
-        @click="router.push(action.path)"
+    <div class="cards">
+      <div
+        v-for="card in editMode ? statCards : visibleCards"
+        :key="card.key"
+        class="card"
+        :class="{ dimmed: editMode && hiddenCards.includes(card.key) }"
+        :title="editMode ? '点击切换显示/隐藏' : undefined"
+        role="button"
+        @click="toggleCard(card.key)"
       >
-        <span class="action-label">{{ action.label }}</span>
-        <span class="action-desc">{{ action.desc }}</span>
+        <div class="k">{{ card.label }}</div>
+        <div class="v">
+          <template v-if="loading">—</template>
+          <template v-else>{{ (stats as Record<string, number>)[card.key] }}<small> 项</small></template>
+        </div>
+        <span v-if="editMode" class="card-eye">{{ hiddenCards.includes(card.key) ? '＋ 显示' : '－ 隐藏' }}</span>
+      </div>
+    </div>
+    <div class="edit-bar">
+      <button type="button" class="cfg-btn" :class="{ active: editMode }" @click="editMode = !editMode">
+        {{ editMode ? '✓ 完成调整' : '调整布局' }}
       </button>
+      <span v-if="editMode" class="edit-hint">点击卡片可切换显示/隐藏（至少保留一张），改动即时生效</span>
+    </div>
+
+    <div class="row2">
+      <div class="panel">
+        <h3>
+          订单/投流趋势
+          <span class="trend-days">
+            <button
+              v-for="d in TREND_CHOICES"
+              :key="d"
+              type="button"
+              class="day-btn"
+              :class="{ active: trendDays === d }"
+              @click="loadTrend(d)"
+            >
+              {{ d }}日
+            </button>
+          </span>
+        </h3>
+        <div class="chart" aria-label="近N日订单趋势">
+          <div v-if="!chartData.length" class="chart-empty">
+            暂无趋势数据
+          </div>
+          <div
+            v-else
+            v-for="(v, i) in chartData"
+            :key="i"
+            class="bar"
+            :style="{ height: `${Math.max(v, 2)}%` }"
+            :title="`${chartDates[i] ?? ''} ${v} 单`"
+          >
+            <span>{{ v }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>待办 <span class="tag">点击进入</span></h3>
+        <div class="todo">
+          <button
+            v-for="item in todoItems"
+            :key="item.type"
+            type="button"
+            class="item"
+            @click="router.push(item.path)"
+          >
+            <span class="ic" :style="{ background: `${item.color}22`, color: item.color }">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" v-html="item.icon" />
+            </span>
+            <span>{{ item.label }}</span>
+            <span class="meta">{{ item.count > 0 ? `${item.count} 条待处理` : '暂无' }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* ========================================
-   首页容器
-   ======================================== */
-.home-page {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-/* ========================================
-   欢迎区
-   ======================================== */
-.welcome-banner {
-  margin-bottom: var(--space-6);
-}
-
-.welcome-title {
-  font-size: var(--text-2xl);              /* 24px */
-  font-weight: 700;
-  color: var(--app-neutral-800);
-  margin: 0 0 var(--space-1);
-  line-height: 1.3;
-}
-
-.welcome-desc {
-  font-size: var(--text-base);             /* 14px */
-  color: var(--app-neutral-500);
-  margin: 0;
-}
-
-/* ========================================
-   统计卡片网格
-   ======================================== */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--space-4);                     /* 16px */
-  margin-bottom: var(--space-8);           /* 32px */
-}
-
-/* 统计卡片 */
-.stat-card {
-  background: var(--app-neutral-0);
-  border: 1px solid var(--app-neutral-100);
-  border-radius: var(--radius-2xl);        /* 16px */
-  padding: var(--space-4);                 /* 16px */
+.ov-head {
   display: flex;
   align-items: center;
-  gap: var(--space-3);                     /* 12px */
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--duration-normal) var(--ease-out),
-              border-color var(--duration-normal) var(--ease-out);
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-
-.stat-card:hover {
-  box-shadow: var(--shadow-md);
+.ov-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.config-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.cfg-label {
+  font-size: 12px;
+  color: var(--app-neutral-400);
+}
+.cfg-select {
+  height: 30px;
+  border: 1px solid var(--app-neutral-200);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  padding: 0 8px;
+  color: var(--app-neutral-800);
+  font-family: inherit;
+}
+.cfg-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--app-neutral-200);
+  background: #fff;
+  color: var(--app-neutral-700);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cfg-btn:hover {
+  border-color: var(--app-brand-500);
+  color: var(--app-brand-500);
+}
+.cfg-btn.active {
+  background: var(--app-brand-500);
+  border-color: var(--app-brand-500);
+  color: #fff;
+}
+.cfg-btn.danger:hover {
+  border-color: var(--app-danger-500);
+  color: var(--app-danger-500);
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.card {
+  background: #fff;
+  border: 1px solid var(--app-neutral-200);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  position: relative;
+}
+.card.dimmed {
+  opacity: 0.45;
+}
+.card[role='button'] {
+  cursor: pointer;
+}
+.card-eye {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 11px;
+  color: var(--app-brand-500);
+}
+.edit-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  min-height: 30px;
+}
+.edit-hint {
+  font-size: 12px;
+  color: var(--app-neutral-400);
+}
+.trend-days {
+  display: inline-flex;
+  gap: 4px;
+  font-weight: 400;
+}
+.day-btn {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--app-neutral-200);
+  background: transparent;
+  font-size: 11px;
+  color: var(--app-neutral-400);
+  cursor: pointer;
+  font-family: inherit;
+}
+.day-btn.active {
+  background: var(--app-brand-500);
+  border-color: var(--app-brand-500);
+  color: #fff;
+}
+/* ===== 指标卡片 ===== */
+.card {
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  overflow: hidden;
+}
+.card:hover {
+  border-color: var(--app-neutral-300);
+  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08);
+  transform: translateY(-2px);
+}
+.card .k {
+  font-size: 12px;
+  color: var(--app-neutral-400);
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card .v {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--app-neutral-900);
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.card .v small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--app-neutral-400);
+  margin-left: 3px;
+  letter-spacing: 0;
+}
+@media (max-width: 1500px) {
+  .cards { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 1100px) {
+  .cards { grid-template-columns: repeat(2, 1fr); }
+}
+/* ===== 底部面板：趋势图 + 待办 ===== */
+.row2 {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+  align-items: stretch;
+}
+@media (max-width: 1100px) {
+  .row2 { grid-template-columns: 1fr; }
+}
+.panel {
+  background: #fff;
+  border: 1px solid var(--app-neutral-200);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.panel:hover {
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+  transform: translateY(-1px);
+}
+.panel h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-neutral-800);
+}
+.panel h3 .tag {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--app-brand-500);
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+/* 趋势柱状图 */
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 170px;
+  padding-top: 22px;
+}
+.chart-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--app-neutral-400);
+  font-size: 13px;
+  background: var(--app-neutral-50);
+  border-radius: 8px;
+}
+.bar {
+  flex: 1;
+  min-width: 4px;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--app-brand-500), rgba(37, 99, 235, 0.55));
+  position: relative;
+  transition: height 0.4s ease, opacity 0.15s ease;
+  cursor: default;
+}
+.bar:hover {
+  opacity: 0.85;
+}
+.bar span {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--app-neutral-400);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+.bar:hover span {
+  opacity: 1;
+}
+/* 待办列表 */
+.todo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--app-neutral-800);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.item:hover {
+  background: var(--app-neutral-50);
   border-color: var(--app-neutral-200);
 }
-
-/* 统计图标 */
-.stat-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-xl);         /* 12px */
+.item:active {
+  transform: scale(0.99);
+}
+.item .ic {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: transform var(--duration-normal) var(--ease-out);
 }
-
-.stat-card:hover .stat-icon {
-  transform: scale(1.08);
+.item .ic svg {
+  width: 15px;
+  height: 15px;
 }
-
-/* 各卡片颜色（纯 CSS 变量，零硬编码） */
-.stat-card[data-key="accounts"]  .stat-icon { background: var(--app-brand-100);         color: var(--app-brand-600); }
-.stat-card[data-key="intels"]    .stat-icon { background: var(--app-driver-lazy-bg);     color: var(--app-driver-lazy); }
-.stat-card[data-key="topics"]    .stat-icon { background: var(--app-driver-peep-bg);     color: var(--app-driver-peep); }
-.stat-card[data-key="scripts"]   .stat-icon { background: var(--app-driver-greed-bg);    color: var(--app-driver-greed); }
-.stat-card[data-key="materials"] .stat-icon { background: var(--app-success-100);        color: var(--app-success-600); }
-.stat-card[data-key="videos"]    .stat-icon { background: var(--app-danger-100);         color: var(--app-danger-600); }
-.stat-card[data-key="publishes"] .stat-icon { background: var(--app-warning-100);        color: var(--app-warning-600); }
-
-/* 统计正文区 */
-.stat-body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-/* 统计数字 */
-.stat-value {
-  font-size: var(--text-3xl);              /* 28px */
-  font-weight: 700;
-  font-family: var(--font-number);
-  color: var(--app-neutral-800);
-  line-height: 1.2;
-}
-
-/* 统计标签 */
-.stat-label {
-  font-size: var(--text-sm);               /* 12px */
+.item .meta {
+  margin-left: auto;
+  font-size: 12px;
   color: var(--app-neutral-400);
-}
-
-/* ========================================
-   骨架屏（加载态）
-   ======================================== */
-.stat-icon-skeleton {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
-  flex-shrink: 0;
-}
-
-.stat-value-skeleton {
-  width: 48px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  margin-bottom: 4px;
-}
-
-.stat-label-skeleton {
-  width: 32px;
-  height: 14px;
-  border-radius: var(--radius-sm);
-}
-
-/* ========================================
-   快捷入口
-   ======================================== */
-.section-title {
-  font-size: var(--text-md);               /* 16px */
-  font-weight: 600;
-  color: var(--app-neutral-700);
-  margin: 0 0 var(--space-3);             /* 12px */
-}
-
-.quick-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--space-3);                     /* 12px */
-}
-
-/* 快捷入口卡片 */
-.action-card {
-  background: var(--app-neutral-0);
-  border: 1px solid var(--app-neutral-200);
-  border-radius: var(--radius-lg);         /* 8px */
-  padding: var(--space-4) var(--space-5);  /* 16px 20px */
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  font-size: var(--text-base);
-  transition: border-color var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out),
-              background-color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
-}
-
-.action-card:hover {
-  border-color: var(--app-brand-300);
-  color: var(--app-brand-600);
-  background: var(--app-brand-50);
-  box-shadow: var(--shadow-sm);
-}
-
-.action-label {
-  display: block;
-  font-weight: 600;
-  color: var(--app-neutral-800);
-  margin-bottom: var(--space-1);
-  transition: color var(--duration-fast) var(--ease-out);
-}
-
-.action-card:hover .action-label {
-  color: var(--app-brand-600);
-}
-
-.action-desc {
-  display: block;
-  font-size: var(--text-sm);               /* 12px */
-  color: var(--app-neutral-400);
-  transition: color var(--duration-fast) var(--ease-out);
-}
-
-.action-card:hover .action-desc {
-  color: var(--app-brand-400);
+  white-space: nowrap;
 }
 </style>

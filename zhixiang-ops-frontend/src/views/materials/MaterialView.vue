@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+
+/** 素材来源/服务商 → 中文显示（值保持代码，仅展示中文化） */
+function providerLabel(p: unknown): string {
+  const s = String(p ?? '')
+  const map: Record<string, string> = {
+    jimeng: '即梦',
+    keling: '可灵',
+    local: '本地',
+    upload: '上传',
+  }
+  return map[s] ?? s
+}
 import {
   generateMaterial,
   uploadMaterial,
@@ -177,11 +189,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-container" aria-label="G 素材中心">
+  <div class="page-container" aria-label="素材中心">
     <!-- 页面标题区 -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">G·素材中心</h1>
+        <h1 class="page-title">素材中心</h1>
         <p class="page-subtitle">管理 AI 生成、实拍上传的图片/视频素材，标签化管理，源透明追溯</p>
       </div>
     </div>
@@ -290,16 +302,16 @@ onMounted(() => {
           <el-form label-width="110px" @submit.prevent>
             <el-form-item label="素材类型">
               <el-select v-model="genForm.type" style="width: 220px" aria-label="生成素材类型">
-                <el-option label="图片 image" value="image" />
-                <el-option label="视频 video" value="video" />
+                <el-option label="图片" value="image" />
+                <el-option label="视频" value="video" />
               </el-select>
             </el-form-item>
-            <el-form-item label="来源 Provider">
+            <el-form-item label="来源服务商">
               <el-select v-model="genForm.source" style="width: 220px" aria-label="生成来源">
                 <el-option v-for="opt in aiSourceOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
-            <el-form-item label="提示词 prompt">
+            <el-form-item label="提示词">
               <el-input
                 v-model="genForm.prompt"
                 type="textarea"
@@ -308,17 +320,17 @@ onMounted(() => {
                 aria-label="生成提示词"
               />
             </el-form-item>
-            <el-form-item label="关联脚本 ID">
+            <el-form-item label="关联脚本编号">
               <el-input
                 v-model.number="genForm.relatedScriptId"
                 type="number"
                 placeholder="可选"
                 style="width: 220px"
-                aria-label="关联脚本id"
+                aria-label="关联脚本编号"
                 clearable
               />
             </el-form-item>
-            <el-form-item label="比例 ratio">
+            <el-form-item label="比例">
               <el-input
                 v-model="genForm.ratio"
                 placeholder="可选，如 16:9"
@@ -341,7 +353,7 @@ onMounted(() => {
               {{ materialTypeMeta[genResult.type].label }}
             </span>
             <el-tag v-if="genResult.meta && genResult.meta.provider" type="warning" size="small">
-              源透明：{{ genResult.meta.provider }}
+              源透明：{{ providerLabel(genResult.meta.provider) }}
             </el-tag>
             <el-tag :type="materialStatusMeta[genResult.status].type" size="small">{{ materialStatusMeta[genResult.status].label }}</el-tag>
           </div>
@@ -378,20 +390,20 @@ onMounted(() => {
             <el-form-item label="来源">
               <el-input :model-value="'upload（上传）'" disabled aria-label="来源固定上传" />
             </el-form-item>
-            <el-form-item label="素材地址 url">
+            <el-form-item label="素材地址">
               <el-input v-model="upForm.url" placeholder="素材可访问地址" aria-label="素材地址" />
             </el-form-item>
-            <el-form-item label="关联脚本 ID">
+            <el-form-item label="关联脚本编号">
               <el-input
                 v-model.number="upForm.relatedScriptId"
                 type="number"
                 placeholder="可选"
                 style="width: 220px"
-                aria-label="关联脚本id"
+                aria-label="关联脚本编号"
                 clearable
               />
             </el-form-item>
-            <el-form-item label="比例 ratio">
+            <el-form-item label="比例">
               <el-input
                 v-model="upForm.ratio"
                 placeholder="可选，如 16:9"
@@ -400,7 +412,7 @@ onMounted(() => {
                 clearable
               />
             </el-form-item>
-            <el-form-item label="标签 tags">
+            <el-form-item label="标签">
               <el-input
                 v-model="upForm.tags"
                 placeholder="可选，逗号分隔"

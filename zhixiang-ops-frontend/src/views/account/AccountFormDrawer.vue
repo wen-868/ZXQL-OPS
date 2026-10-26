@@ -57,31 +57,82 @@ const form = reactive<AccountPayload & { id?: number }>({
   remark: '',
 })
 
+/** 新建默认值（重置时先回填再按编辑账号覆盖） */
+const FORM_DEFAULTS: AccountPayload & { id?: number } = {
+  id: undefined,
+  platform: 'douyin',
+  platformAccountId: '',
+  nickname: '',
+  avatarUrl: '',
+  identity: 'matrix',
+  track: '',
+  stage: 'nurturing',
+  accessToken: '',
+  refreshToken: '',
+  tokenExpireAt: '',
+  fansCount: 0,
+  followCount: 0,
+  likeCount: 0,
+  remark: '',
+}
+
 function resetForm() {
   isEdit.value = !!props.account
-  form.id = props.account?.id
-  form.platform = props.account?.platform ?? 'douyin'
-  form.platformAccountId = props.account?.platformAccountId ?? ''
-  form.nickname = props.account?.nickname ?? ''
-  form.avatarUrl = props.account?.avatarUrl ?? ''
-  form.identity = props.account?.identity ?? 'matrix'
-  form.track = props.account?.track ?? ''
-  form.stage = props.account?.stage ?? 'nurturing'
-  form.accessToken = ''
-  form.refreshToken = ''
-  form.tokenExpireAt = ''
-  form.fansCount = props.account?.fansCount ?? 0
-  form.followCount = props.account?.followCount ?? 0
-  form.likeCount = props.account?.likeCount ?? 0
-  form.remark = props.account?.remark ?? ''
+  Object.assign(form, FORM_DEFAULTS)
+  const a = props.account
+  if (a) {
+    Object.assign(form, {
+      id: a.id,
+      platform: a.platform,
+      platformAccountId: a.platformAccountId,
+      nickname: a.nickname,
+      avatarUrl: a.avatarUrl,
+      identity: a.identity,
+      track: a.track,
+      stage: a.stage,
+      fansCount: a.fansCount,
+      followCount: a.followCount,
+      likeCount: a.likeCount,
+      remark: a.remark,
+    })
+  }
   formRef.value?.clearValidate()
 }
 
 const rules: FormRules = {
   platform: [{ required: true, message: '请选择平台', trigger: 'change' }],
   platformAccountId: [
-    { required: true, message: '请输入平台账号ID', trigger: 'blur' },
+    { required: true, message: '请输入平台账号编号', trigger: 'blur' },
   ],
+}
+
+/** 仅发送有值的可选字段，避免覆盖存量 */
+const OPTIONAL_PAYLOAD_KEYS = [
+  'nickname',
+  'avatarUrl',
+  'identity',
+  'track',
+  'stage',
+  'accessToken',
+  'refreshToken',
+  'tokenExpireAt',
+  'remark',
+] as const
+
+function buildPayload(): AccountPayload {
+  const payload: AccountPayload = {
+    platform: form.platform,
+    platformAccountId: form.platformAccountId,
+    fansCount: Number(form.fansCount) || 0,
+    followCount: Number(form.followCount) || 0,
+    likeCount: Number(form.likeCount) || 0,
+  }
+  for (const key of OPTIONAL_PAYLOAD_KEYS) {
+    const value = form[key]
+    // 明文 token：仅在有值时发送，提示服务端加密；响应不回传
+    if (value) Object.assign(payload, { [key]: value })
+  }
+  return payload
 }
 
 async function handleSubmit() {
@@ -90,25 +141,7 @@ async function handleSubmit() {
     if (!valid) return
     submitting.value = true
     try {
-      // 只发送有值的字段，避免覆盖
-      const payload: AccountPayload = {
-        platform: form.platform,
-        platformAccountId: form.platformAccountId,
-      }
-      if (form.nickname) payload.nickname = form.nickname
-      if (form.avatarUrl) payload.avatarUrl = form.avatarUrl
-      if (form.identity) payload.identity = form.identity
-      if (form.track) payload.track = form.track
-      if (form.stage) payload.stage = form.stage
-      // 明文 token：仅在有值时发送，提示服务端加密；响应不回传
-      if (form.accessToken) payload.accessToken = form.accessToken
-      if (form.refreshToken) payload.refreshToken = form.refreshToken
-      if (form.tokenExpireAt) payload.tokenExpireAt = form.tokenExpireAt
-      payload.fansCount = Number(form.fansCount) || 0
-      payload.followCount = Number(form.followCount) || 0
-      payload.likeCount = Number(form.likeCount) || 0
-      if (form.remark) payload.remark = form.remark
-
+      const payload = buildPayload()
       if (isEdit.value && form.id != null) {
         await updateAccount(form.id, payload)
         ElMessage.success('更新成功')
@@ -152,18 +185,18 @@ async function handleSubmit() {
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="平台账号ID" prop="platformAccountId">
+      <el-form-item label="平台账号编号" prop="platformAccountId">
         <el-input
           v-model="form.platformAccountId"
-          placeholder="平台侧账号唯一ID"
-          aria-label="平台账号ID"
+          placeholder="平台侧账号唯一编号"
+          aria-label="平台账号编号"
         />
       </el-form-item>
       <el-form-item label="昵称">
         <el-input v-model="form.nickname" placeholder="选填" aria-label="昵称" />
       </el-form-item>
-      <el-form-item label="头像URL">
-        <el-input v-model="form.avatarUrl" placeholder="选填" aria-label="头像URL" />
+      <el-form-item label="头像地址">
+        <el-input v-model="form.avatarUrl" placeholder="选填" aria-label="头像地址" />
       </el-form-item>
       <el-form-item label="身份">
         <el-select v-model="form.identity" style="width: 100%">
@@ -189,40 +222,40 @@ async function handleSubmit() {
         </el-select>
       </el-form-item>
 
-      <el-divider content-position="left">Token（明文入参，服务端加密）</el-divider>
+      <el-divider content-position="left">令牌（明文入参，服务端加密）</el-divider>
       <el-alert
         type="warning"
         :closable="false"
         show-icon
-        title="明文 Token 仅作入参，服务端 AES-256-GCM 加密存储，接口响应永不回传密文。"
+        title="明文令牌仅作入参，服务端加密存储，接口响应永不回传密文。"
         style="margin-bottom: 12px"
       />
-      <el-form-item label="Access Token">
+      <el-form-item label="访问令牌">
         <el-input
           v-model="form.accessToken"
           type="password"
           show-password
           placeholder="留空则不修改"
-          aria-label="Access Token"
+          aria-label="访问令牌"
         />
       </el-form-item>
-      <el-form-item label="Refresh Token">
+      <el-form-item label="刷新令牌">
         <el-input
           v-model="form.refreshToken"
           type="password"
           show-password
           placeholder="选填"
-          aria-label="Refresh Token"
+          aria-label="刷新令牌"
         />
       </el-form-item>
-      <el-form-item label="Token过期">
+      <el-form-item label="令牌过期">
         <el-date-picker
           v-model="form.tokenExpireAt"
           type="datetime"
           placeholder="选填"
           value-format="YYYY-MM-DDTHH:mm:ssZ"
           style="width: 100%"
-          aria-label="Token过期时间"
+          aria-label="令牌过期时间"
         />
       </el-form-item>
 
