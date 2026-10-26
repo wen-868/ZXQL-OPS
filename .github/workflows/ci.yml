@@ -1,0 +1,73 @@
+# 智享全链运营系统 · CI 门禁
+# 触发：push / pull_request 到 main、master、dev（按需调整分支名）
+# 组成：
+#   backend  : lint:check → typecheck → jest --coverage（覆盖率阈值门禁，见 backend package.json jest.coverageThreshold）
+#   frontend : lint → vitest run（单测+覆盖率）→ vue-tsc && vite build
+#
+# 注：本仓库为本地开发优先；CI 在推送远端后自动生效。覆盖率阈值提升后（A2），
+#     jest --coverage 会在低于阈值时以非 0 退出，阻断合并。
+
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master, dev]
+
+jobs:
+  backend:
+    name: Backend (NestJS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zhixiang-ops-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: zhixiang-ops-backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint:check
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests + coverage gate
+        run: npm run test:cov -- --forceExit
+
+  frontend:
+    name: Frontend (Vue3 + Vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zhixiang-ops-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: zhixiang-ops-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Type check + build
+        run: npm run build
