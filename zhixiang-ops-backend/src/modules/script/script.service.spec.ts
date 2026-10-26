@@ -51,53 +51,96 @@ function buildQueryBuilder() {
   };
 }
 
+/** 对齐 P 违禁词库种子（BANNED_WORDS），使 checkCompliance 命中断言可验证 */
+const BANNED: Array<{ word: string; level: ComplianceLevel }> = [
+  { word: '国家级', level: 'high' },
+  { word: '最高级', level: 'high' },
+  { word: '最佳', level: 'high' },
+  { word: '第一品牌', level: 'high' },
+  { word: '绝对', level: 'high' },
+  { word: '100%', level: 'high' },
+  { word: '一夜暴富', level: 'high' },
+  { word: '博彩', level: 'high' },
+  { word: '最', level: 'medium' },
+  { word: '顶级', level: 'medium' },
+  { word: '极品', level: 'medium' },
+  { word: '全网最低', level: 'medium' },
+  { word: '免费送', level: 'low' },
+];
+
+/** 单个违禁词的首处命中（未命中返回 null） */
+function firstHit(t: string, b: { word: string; level: ComplianceLevel }): ComplianceHit | null {
+  const idx = t.indexOf(b.word);
+  return idx >= 0 ? { word: b.word, position: idx, level: b.level } : null;
+}
+
+/** mock 的 checkText 实现：逐词取首处命中，再按最高级别汇总 */
+function mockCheckText(text: string): ComplianceRisk {
+  const hits = BANNED.map((b) => firstHit(text ?? '', b)).filter(
+    (h): h is ComplianceHit => h !== null,
+  );
+  const level = hits.reduce<ComplianceLevel>(
+    (acc, h) =>
+      acc === 'high' || h.level === 'high'
+        ? 'high'
+        : acc === 'medium' || h.level === 'medium'
+          ? 'medium'
+          : acc === 'low' || h.level === 'low'
+            ? 'low'
+            : 'none',
+    'none',
+  );
+  const score = level === 'high' ? 100 : level === 'medium' ? 60 : level === 'low' ? 20 : 0;
+  const result = level === 'high' ? 'block' : level === 'medium' ? 'warn' : 'pass';
+  return { hits, level, score, result, checkedAt: new Date().toISOString() } as ComplianceRisk;
+}
+
 function makeTopic(partial: Partial<TopicEntity> = {}): TopicEntity {
+  // 默认值 + 展开覆盖（替代逐字段 ??）
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? TENANT,
-    attributionId: partial.attributionId ?? 'attr_t1_content_abc',
-    title: partial.title ?? '选题A',
-    humanDriver: partial.humanDriver ?? '贪',
-    emotion: partial.emotion ?? '好奇',
-    formulaTags: partial.formulaTags ?? ['价格'],
-    status: partial.status ?? ('idea' as TopicStatus),
-    score: partial.score ?? 0,
-    analysisId: partial.analysisId,
-    abVariantOf: partial.abVariantOf,
-    scheduledAt: partial.scheduledAt,
-    accountId: partial.accountId,
-    promptVersion: partial.promptVersion ?? 'v1',
-    modelUsed: partial.modelUsed ?? '',
-    createdAt: partial.createdAt ?? new Date('2025-01-01T00:00:00Z'),
-    updatedAt: partial.updatedAt ?? new Date('2025-01-01T00:00:00Z'),
+    id: 1,
+    tenantId: TENANT,
+    attributionId: 'attr_t1_content_abc',
+    title: '选题A',
+    humanDriver: '贪',
+    emotion: '好奇',
+    formulaTags: ['价格'],
+    status: 'idea' as TopicStatus,
+    score: 0,
+    promptVersion: 'v1',
+    modelUsed: '',
+    createdAt: new Date('2025-01-01T00:00:00Z'),
+    updatedAt: new Date('2025-01-01T00:00:00Z'),
+    ...partial,
   } as TopicEntity;
 }
 
 function makeScript(partial: Partial<ScriptEntity> = {}): ScriptEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? TENANT,
-    topicId: partial.topicId ?? 1,
-    attributionId: partial.attributionId ?? 'attr_t1_content_abc',
-    title: partial.title ?? '选题A',
-    content: partial.content ?? '前3秒钩子\n正文内容',
-    hook: partial.hook ?? '前3秒钩子',
-    hookEmotion: partial.hookEmotion ?? '好奇',
-    spokenTrack: partial.spokenTrack ?? [{ tsStart: 0, tsEnd: 30, text: '前3秒钩子\n正文内容' }],
-    subtitleTrack: partial.subtitleTrack ?? [],
-    templateId: partial.templateId ?? null,
-    version: partial.version ?? 1,
-    parentVersionId: partial.parentVersionId ?? null,
-    status: partial.status ?? ScriptStatus.Draft,
-    complianceRisk: partial.complianceRisk ?? {
+    id: 1,
+    tenantId: TENANT,
+    topicId: 1,
+    attributionId: 'attr_t1_content_abc',
+    title: '选题A',
+    content: '前3秒钩子\n正文内容',
+    hook: '前3秒钩子',
+    hookEmotion: '好奇',
+    spokenTrack: [{ tsStart: 0, tsEnd: 30, text: '前3秒钩子\n正文内容' }],
+    subtitleTrack: [],
+    templateId: null,
+    version: 1,
+    parentVersionId: null,
+    status: ScriptStatus.Draft,
+    complianceRisk: {
       hits: [],
       level: 'none',
       checkedAt: '2025-01-01T00:00:00.000Z',
     },
-    promptVersion: partial.promptVersion ?? 'v1',
-    modelUsed: partial.modelUsed ?? 'ollama/llama3',
-    createdAt: partial.createdAt ?? new Date('2025-01-01T00:00:00Z'),
-    updatedAt: partial.updatedAt ?? new Date('2025-01-01T00:00:00Z'),
+    promptVersion: 'v1',
+    modelUsed: 'ollama/llama3',
+    createdAt: new Date('2025-01-01T00:00:00Z'),
+    updatedAt: new Date('2025-01-01T00:00:00Z'),
+    ...partial,
   } as ScriptEntity;
 }
 
@@ -123,55 +166,8 @@ describe('ScriptService', () => {
       generateText: jest.fn(() => Promise.resolve(SCRIPT_CONTENT_OK)),
     };
     // 对齐 P 违禁词库种子（BANNED_WORDS），使 checkCompliance 命中断言可验证
-    const BANNED: Array<{ word: string; level: ComplianceLevel }> = [
-      { word: '国家级', level: 'high' },
-      { word: '最高级', level: 'high' },
-      { word: '最佳', level: 'high' },
-      { word: '第一品牌', level: 'high' },
-      { word: '绝对', level: 'high' },
-      { word: '100%', level: 'high' },
-      { word: '一夜暴富', level: 'high' },
-      { word: '博彩', level: 'high' },
-      { word: '最', level: 'medium' },
-      { word: '顶级', level: 'medium' },
-      { word: '极品', level: 'medium' },
-      { word: '全网最低', level: 'medium' },
-      { word: '免费送', level: 'low' },
-    ];
     mockCompliance = {
-      checkText: jest.fn((text: string) =>
-        Promise.resolve(
-          (() => {
-            const hits: ComplianceHit[] = [];
-            const t = text ?? '';
-            for (const b of BANNED) {
-              const idx = t.indexOf(b.word);
-              if (idx >= 0) hits.push({ word: b.word, position: idx, level: b.level });
-            }
-            const level = hits.reduce<ComplianceLevel>(
-              (acc, h) =>
-                acc === 'high' || h.level === 'high'
-                  ? 'high'
-                  : acc === 'medium' || h.level === 'medium'
-                    ? 'medium'
-                    : acc === 'low' || h.level === 'low'
-                      ? 'low'
-                      : 'none',
-              'none',
-            );
-            const score =
-              level === 'high' ? 100 : level === 'medium' ? 60 : level === 'low' ? 20 : 0;
-            const result = level === 'high' ? 'block' : level === 'medium' ? 'warn' : 'pass';
-            return {
-              hits,
-              level,
-              score,
-              result,
-              checkedAt: new Date().toISOString(),
-            } as ComplianceRisk;
-          })(),
-        ),
-      ),
+      checkText: jest.fn((text: string) => Promise.resolve(mockCheckText(text))),
     };
 
     svc = new ScriptService(
@@ -673,6 +669,42 @@ describe('ScriptService', () => {
   describe('租户上下文缺失防护', () => {
     it('未包裹 TenantContext.run 调用 getScript → 抛 TENANT_REQUIRED', async () => {
       await expect(svc.getScript(1)).rejects.toMatchObject({ code: 'TENANT_REQUIRED' });
+    });
+  });
+
+  // —— 自动免审通道（自动化投流调用） ——
+  describe('autoApprove 自动免审', () => {
+    it('draft 且合规非高危 → 置 approved（可发布）', async () => {
+      const script = makeScript({
+        id: 30,
+        status: ScriptStatus.Draft,
+        complianceRisk: { level: 'low', hits: [], checkedAt: new Date().toISOString() },
+      });
+      mockScriptRepo.findOne.mockResolvedValueOnce(script);
+      await TenantContext.run({ traceId: 'aa1', tenantId: TENANT }, () => svc.autoApprove(30));
+      const saved = mockScriptRepo.save.mock.calls.map((c: any[]) => c[0]) as ScriptEntity[];
+      expect(saved[saved.length - 1].status).toBe(ScriptStatus.Approved);
+    });
+
+    it('合规高危 → 抛 COMPLIANCE_BLOCKED，不发布', async () => {
+      const script = makeScript({
+        id: 31,
+        status: ScriptStatus.Draft,
+        complianceRisk: { level: 'high', hits: [], checkedAt: new Date().toISOString() },
+      });
+      mockScriptRepo.findOne.mockResolvedValueOnce(script);
+      await expect(
+        TenantContext.run({ traceId: 'aa2', tenantId: TENANT }, () => svc.autoApprove(31)),
+      ).rejects.toMatchObject({ code: 'COMPLIANCE_BLOCKED' });
+    });
+
+    it('已 approved/published → 原样返回，不重复改动', async () => {
+      const script = makeScript({ id: 32, status: ScriptStatus.Approved });
+      mockScriptRepo.findOne.mockResolvedValueOnce(script);
+      const res = await TenantContext.run({ traceId: 'aa3', tenantId: TENANT }, () =>
+        svc.autoApprove(32),
+      );
+      expect(res.status).toBe(ScriptStatus.Approved);
     });
   });
 });

@@ -1,5 +1,6 @@
-import { IsOptional, IsBoolean, IsString, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsBoolean, IsString, IsInt, Min, Max, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
+import { CommentReviewStatus } from '../intel.types';
 
 /** 采集评论查询 DTO（供 D 人性分析分页/筛选消费） */
 export class CollectedCommentQueryDto {
@@ -21,6 +22,11 @@ export class CollectedCommentQueryDto {
   @Type(() => Boolean)
   @IsBoolean()
   isClean?: boolean;
+
+  /** pending / approved / rejected；不传=全部 */
+  @IsOptional()
+  @IsEnum(CommentReviewStatus)
+  reviewStatus?: CommentReviewStatus;
 
   @IsOptional()
   @IsString()

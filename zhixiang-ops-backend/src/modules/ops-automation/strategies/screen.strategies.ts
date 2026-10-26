@@ -18,15 +18,15 @@ export class ScreenHeatStrategy implements OpsStrategy {
     key: 'screen_heat',
     stage: 'screen' as const,
     name: '热度优先筛选',
-    tech: 'Rule(好奇驱动) + Insight DB',
+    tech: 'Rule(窥探驱动) + Insight DB',
     impl: 'rule' as const,
     scenarios: ['hotspot', 'competitor'],
     enabledByDefault: true,
-    desc: '按好奇驱动择高选题，适合追热点与竞品监测。',
+    desc: '按窥探驱动择高选题，适合追热点与竞品监测。',
   };
   constructor(private readonly topicService: TopicService) {}
   async run(_ctx: OpsChainContext): Promise<ScreenResult> {
-    const { topics } = await this.topicService.generateTopics({ driver: '好奇', limit: 5 });
+    const { topics } = await this.topicService.generateTopics({ driver: '窥探', limit: 5 });
     return { topicIds: topics.map((t) => t.id), chosen: topics.length, strategy: this.meta.key };
   }
 }

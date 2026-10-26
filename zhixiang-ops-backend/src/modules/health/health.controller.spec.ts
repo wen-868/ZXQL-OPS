@@ -1,4 +1,5 @@
 import { HealthController } from './health.controller';
+import { HealthChecker } from './health-checker';
 import { TenantContext } from '../../tenant/tenant-context';
 import { AppError } from '../../shared/app-error';
 import { DataSource } from 'typeorm';
@@ -8,7 +9,22 @@ describe('HealthController', () => {
     query: jest.fn().mockResolvedValue([{ '1': 1 }]),
   } as unknown as DataSource;
   const mockRedis = { client: { ping: jest.fn().mockResolvedValue('PONG') } } as any;
-  const controller = new HealthController(mockDataSource, mockRedis);
+  const mockHealthChecker = new HealthChecker();
+  const mockBrowserGateway = {
+    getStatus: jest.fn().mockReturnValue({
+      ready: true,
+      circuitBreakerState: 'closed',
+      poolStats: { totalInstances: 0 },
+      poolMax: 5,
+      tenantId: undefined,
+    }),
+  } as any;
+  const controller = new HealthController(
+    mockDataSource,
+    mockRedis,
+    mockHealthChecker,
+    mockBrowserGateway,
+  );
 
   it('check() 探活 DB/Redis 并返回健康结构（无租户上下文）', async () => {
     const r = await TenantContext.run({ traceId: 't-health' }, () => controller.check());
@@ -38,5 +54,15 @@ describe('HealthController', () => {
       controller.strict(),
     );
     expect(r.tenantId).toBe('tn-strict');
+  });
+
+  it('deep() 返回全量检查结果（mysql/redis/browser-pool）', async () => {
+    const r = await controller.deep();
+    expect(r.service).toBe('zhixiang-ops');
+    expect(r.status).toBe('healthy');
+    const checks = (r as any).checks.map((c: any) => c.name);
+    expect(checks).toEqual(expect.arrayContaining(['mysql', 'redis', 'browser-pool']));
+    expect(typeof r.uptimeMs).toBe('number');
+    expect(typeof r.version).toBe('string');
   });
 });

@@ -56,6 +56,19 @@ export class DouyinApiError extends Error {
   }
 }
 
+/** 抖音包装结构中的错误片段（data/extra 公共形态） */
+type DouyinErrorPart = { error_code?: number; description?: string } | undefined;
+
+/** 取错误码（缺省 0=无错误） */
+function codeOf(part: DouyinErrorPart): number {
+  return part?.error_code ?? 0;
+}
+
+/** 取可读错误描述（data → extra → 兜底文案） */
+function describeOf(data: DouyinErrorPart, extra: DouyinErrorPart, stage: string): string {
+  return data?.description || extra?.description || `${stage} failed`;
+}
+
 @Injectable()
 export class DouyinClientService {
   private readonly logger = new Logger(DouyinClientService.name);
@@ -110,8 +123,11 @@ export class DouyinClientService {
     vidPath: string,
   ): Promise<{ videoId: string }> {
     const url = `${this.baseUrl}/api/douyin/v1/video/upload_video/?open_id=${encodeURIComponent(openId)}`;
+    // vidPath 为系统内视频流水线生成的成片路径，非用户输入
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const fileBuffer = readFileSync(vidPath);
     const fileName = basename(vidPath);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const fileSize = statSync(vidPath).size;
 
     // 构造 multipart/form-data
@@ -175,14 +191,19 @@ export class DouyinClientService {
 
   /** 统一错误处理 */
   private throwIfError(resp: DouyinUploadResp | DouyinCreateResp, stage: string): void {
-    const dataCode = resp.data?.error_code ?? 0;
-    const extraCode = resp.extra?.error_code ?? 0;
+    const dataCode = codeOf(resp.data);
+    const extraCode = codeOf(resp.extra);
+    if (dataCode === 0 && extraCode === 0) return;
 
-    if (dataCode !== 0 || extraCode !== 0) {
-      const msg = resp.data?.description || resp.extra?.description || `${stage} failed`;
-      const logid = resp.extra?.logid ?? '';
-      throw new DouyinApiError(msg, dataCode || extraCode, resp.extra?.sub_error_code ?? 0, logid);
-    }
+    const extra = resp.extra;
+    const subErrorCode = extra?.sub_error_code ?? 0;
+    const logid = extra?.logid ?? '';
+    throw new DouyinApiError(
+      describeOf(resp.data, resp.extra, stage),
+      dataCode || extraCode,
+      subErrorCode,
+      logid,
+    );
   }
 
   /** 封装 fetch (Node.js 18+ 内置) */

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppError } from '../../shared/app-error';
@@ -31,6 +31,7 @@ import { VersionScriptDto } from './dto/version-script.dto';
  */
 @Injectable()
 export class ScriptService {
+  private readonly logger = new Logger(ScriptService.name);
   constructor(
     @InjectRepository(ScriptEntity)
     private readonly scriptRepo: Repository<ScriptEntity>,
@@ -56,19 +57,10 @@ export class ScriptService {
     const template = dto.templateId
       ? SCRIPT_TEMPLATES.find((t) => t.id === dto.templateId)
       : undefined;
-
-    const prompt = this.buildPrompt(topic, template?.structure);
-    const result = await this.skillGateway.invoke({
-      skill: 'text-generate',
-      prompt,
-      tenantId,
-    });
+    const structure = template?.structure;
+    const prompt = this.buildPrompt(topic, structure);
+    const result = await this.invokeWithFallback(topic, tenantId, prompt, structure);
     const content = result.content;
-
-    const hook = this.extractHook(content);
-    const hookEmotion = topic.emotion;
-
-    const complianceRisk = await this.scanCompliance(content);
 
     const script = this.scriptRepo.create({
       tenantId,
@@ -76,20 +68,40 @@ export class ScriptService {
       attributionId: topic.attributionId, // 透传 E，禁止重生成
       title: topic.title,
       content,
-      hook,
-      hookEmotion,
+      hook: this.extractHook(content),
+      hookEmotion: topic.emotion,
       spokenTrack: this.buildSpokenTrack(content),
       subtitleTrack: [],
       templateId: template ? template.id : null,
       version: 1,
       parentVersionId: null,
       status: ScriptStatus.Draft,
-      complianceRisk,
+      complianceRisk: await this.scanCompliance(content),
       promptVersion: SCRIPT_PROMPT_VERSION,
       modelUsed: result.modelUsed,
     });
     const saved = await this.scriptRepo.save(script);
     return { script: saved, traceId };
+  }
+
+  /**
+   * 调能力网关生成脚本；不可用时降级为本地模板脚本，保证「上架」阶段在无外部模型
+   * 环境下仍可自动产出草稿；有模型时始终走模型。
+   */
+  private async invokeWithFallback(
+    topic: TopicEntity,
+    tenantId: string,
+    prompt: string,
+    structure?: string,
+  ): Promise<{ content: string; modelUsed?: string }> {
+    try {
+      return await this.skillGateway.invoke({ skill: 'text-generate', prompt, tenantId });
+    } catch (err) {
+      this.logger.warn(
+        `[script#${topic.id}] 能力网关不可用，降级模板脚本：${(err as Error).message}`,
+      );
+      return { content: this.buildFallbackScript(topic, structure), modelUsed: 'rule-fallback' };
+    }
   }
 
   async listScripts(query: ScriptQueryDto): Promise<{
@@ -131,43 +143,73 @@ export class ScriptService {
     const script = await this.scriptRepo.findOne({ where: { id, tenantId } });
     if (!script) throw new AppError('SCRIPT_NOT_FOUND');
 
+    this.assertScriptUpdate(script, dto);
+    this.applyScriptFields(script, dto);
+    return this.scriptRepo.save(script);
+  }
+
+  /** 编辑前校验：情绪合法性 → 状态机流转 → 发布合规门禁 */
+  private assertScriptUpdate(script: ScriptEntity, dto: UpdateScriptDto): void {
     if (
       dto.hookEmotion !== undefined &&
       !(EMOTION_TYPES as readonly string[]).includes(dto.hookEmotion)
     ) {
       throw new AppError('EMOTION_INVALID');
     }
+    if (dto.status === undefined) return;
 
-    if (dto.status !== undefined) {
-      if (!SCRIPT_STATUSES.includes(dto.status as ScriptStatus)) {
-        throw new AppError('SCRIPT_INVALID_TRANSITION');
-      }
-      const from = script.status;
-      const to = dto.status as ScriptStatus;
-      if (!canScriptTransition(from, to)) {
-        throw new AppError('SCRIPT_INVALID_TRANSITION');
-      }
-      // 发布前合规门禁：高危命中禁止 status=published
-      if (to === ScriptStatus.Published && hasHighRisk(script.complianceRisk)) {
-        throw new AppError('COMPLIANCE_BLOCKED');
+    const to = dto.status as ScriptStatus;
+    if (!SCRIPT_STATUSES.includes(to) || !canScriptTransition(script.status, to)) {
+      throw new AppError('SCRIPT_INVALID_TRANSITION');
+    }
+    // 发布前合规门禁：高危命中禁止 status=published
+    if (to === ScriptStatus.Published && hasHighRisk(script.complianceRisk)) {
+      throw new AppError('COMPLIANCE_BLOCKED');
+    }
+  }
+
+  /** 可直赋字段清单（dtoKey → entityKey），数据驱动避免 if 堆叠 */
+  private static readonly SCALAR_FIELDS: Array<[keyof UpdateScriptDto, keyof ScriptEntity]> = [
+    ['title', 'title'],
+    ['hookEmotion', 'hookEmotion'],
+    ['spokenTrack', 'spokenTrack'],
+    ['subtitleTrack', 'subtitleTrack'],
+    ['templateId', 'templateId'],
+    ['status', 'status'],
+  ];
+
+  /** 字段写入：标量按清单赋值；content/hook 联动特殊处理 */
+  private applyScriptFields(script: ScriptEntity, dto: UpdateScriptDto): void {
+    for (const [dtoKey, entityKey] of ScriptService.SCALAR_FIELDS) {
+      const value = dto[dtoKey];
+      if (value !== undefined) {
+        (script as unknown as Record<string, unknown>)[entityKey] = value;
       }
     }
-
-    if (dto.title !== undefined) script.title = dto.title;
     if (dto.content !== undefined) {
       script.content = dto.content;
       script.hook = dto.hook ?? this.extractHook(dto.content);
     } else if (dto.hook !== undefined) {
       script.hook = dto.hook;
     }
-    if (dto.hookEmotion !== undefined) script.hookEmotion = dto.hookEmotion;
-    if (dto.spokenTrack !== undefined) script.spokenTrack = dto.spokenTrack;
-    if (dto.subtitleTrack !== undefined) script.subtitleTrack = dto.subtitleTrack;
-    if (dto.templateId !== undefined) script.templateId = dto.templateId;
-    if (dto.status !== undefined) script.status = dto.status as ScriptStatus;
+  }
 
-    const saved = await this.scriptRepo.save(script);
-    return saved;
+  /**
+   * 自动免审通道（供自动化投流阶段调用）：draft/reviewing 脚本在合规非高危时自动置 approved。
+   * 生成时已跑过 P 合规预检（scanCompliance），此处仅复核高风险门禁，不重复扫描。
+   */
+  async autoApprove(id: number): Promise<ScriptEntity> {
+    const tenantId = TenantContext.requireTenantId();
+    const script = await this.scriptRepo.findOne({ where: { id, tenantId } });
+    if (!script) throw new AppError('SCRIPT_NOT_FOUND');
+    if (script.status === ScriptStatus.Approved || script.status === ScriptStatus.Published) {
+      return script;
+    }
+    if (hasHighRisk(script.complianceRisk)) {
+      throw new AppError('COMPLIANCE_BLOCKED');
+    }
+    script.status = ScriptStatus.Approved;
+    return this.scriptRepo.save(script);
   }
 
   /** 违禁词预检（可选传入 content，否则对当前 content 检查并回写） */
@@ -198,30 +240,47 @@ export class ScriptService {
     if (!current) throw new AppError('SCRIPT_NOT_FOUND');
 
     if (dto.action === 'save') {
-      const content = dto.content ?? current.content;
-      const newScript = this.scriptRepo.create({
-        tenantId,
-        topicId: current.topicId,
-        attributionId: current.attributionId,
-        title: dto.title ?? current.title,
-        content,
-        hook: this.extractHook(content),
-        hookEmotion: current.hookEmotion,
-        spokenTrack: dto.spokenTrack ?? current.spokenTrack,
-        subtitleTrack: dto.subtitleTrack ?? current.subtitleTrack,
-        templateId: current.templateId,
-        version: current.version + 1,
-        parentVersionId: current.id,
-        status: ScriptStatus.Draft,
-        complianceRisk: await this.scanCompliance(content),
-        promptVersion: current.promptVersion,
-        modelUsed: current.modelUsed,
-      });
+      const newScript = await this.buildNextVersion(current, tenantId, dto);
       const saved = await this.scriptRepo.save(newScript);
       return { script: saved, traceId };
     }
-
     // rollback
+    return { script: await this.rollbackVersion(current, tenantId, dto), traceId };
+  }
+
+  /** action=save：基于当前脚本构造 version+1 的新草稿 */
+  private async buildNextVersion(
+    current: ScriptEntity,
+    tenantId: string,
+    dto: VersionScriptDto,
+  ): Promise<ScriptEntity> {
+    const content = dto.content ?? current.content;
+    return this.scriptRepo.create({
+      tenantId,
+      topicId: current.topicId,
+      attributionId: current.attributionId,
+      title: dto.title ?? current.title,
+      content,
+      hook: this.extractHook(content),
+      hookEmotion: current.hookEmotion,
+      spokenTrack: dto.spokenTrack ?? current.spokenTrack,
+      subtitleTrack: dto.subtitleTrack ?? current.subtitleTrack,
+      templateId: current.templateId,
+      version: current.version + 1,
+      parentVersionId: current.id,
+      status: ScriptStatus.Draft,
+      complianceRisk: await this.scanCompliance(content),
+      promptVersion: current.promptVersion,
+      modelUsed: current.modelUsed,
+    });
+  }
+
+  /** action=rollback：校验来源版本后覆盖当前脚本内容并回写 parentVersionId */
+  private async rollbackVersion(
+    current: ScriptEntity,
+    tenantId: string,
+    dto: VersionScriptDto,
+  ): Promise<ScriptEntity> {
     if (!dto.sourceVersionId) throw new AppError('SCRIPT_VERSION_REQUIRED');
     const source = await this.scriptRepo.findOne({
       where: { id: dto.sourceVersionId, tenantId, topicId: current.topicId },
@@ -233,8 +292,7 @@ export class ScriptService {
     current.spokenTrack = source.spokenTrack;
     current.subtitleTrack = source.subtitleTrack;
     current.parentVersionId = source.id;
-    const saved = await this.scriptRepo.save(current);
-    return { script: saved, traceId };
+    return this.scriptRepo.save(current);
   }
 
   /** 模板库（GET /templates） */
@@ -265,6 +323,19 @@ export class ScriptService {
   private extractHook(content: string): string {
     const firstLine = (content.split('\n').find((l) => l.trim().length > 0) ?? '').trim();
     return firstLine.length > 0 ? firstLine : content.slice(0, 60);
+  }
+
+  /** 规则兜底脚本：无 LLM 时按选题信息拼模板草稿（可交付、可过合规扫描） */
+  private buildFallbackScript(topic: TopicEntity, templateStructure?: string): string {
+    const tags = (topic.formulaTags ?? []).join('、') || '无';
+    const structure = templateStructure ? `\n结构参考：${templateStructure}` : '';
+    return [
+      `【前3秒钩子】你注意到了吗？${topic.title.slice(0, 24)}`,
+      `【正文口播】今天聊一个特别扎心的话题：${topic.title}。`,
+      `很多人忽略了它的背后逻辑——它之所以引发共鸣，是因为戳中了「${topic.humanDriver}」这个人性本能，情绪上是「${topic.emotion}」。`,
+      `公式标签：${tags}。${structure}`,
+      `【结尾行动召唤】如果你也有同感，点赞关注，评论区聊聊你的看法。`,
+    ].join('\n');
   }
 
   private buildSpokenTrack(

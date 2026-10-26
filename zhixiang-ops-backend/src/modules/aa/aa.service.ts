@@ -308,27 +308,41 @@ export class CustomerService {
     return null;
   }
 
+  /** 订单类意图：走 Y 订单/物流结构化查询 */
+  private static isOrderIntent(intent: string): boolean {
+    return intent === 'order' || intent === 'logistics';
+  }
+
   /** 结构化查询兜底（订单/物流/商品，读 Y/R） */
   private async tryStructuredReply(
     tenantId: string,
     intent: string,
     session: CustomerSessionEntity,
   ): Promise<string | null> {
-    if ((intent === 'order' || intent === 'logistics') && session.relatedOrderId) {
-      const o = await this.order.getOrder(session.relatedOrderId);
-      if (intent === 'logistics') {
-        const tracks = await this.order.getLogisticsTrack(session.relatedOrderId);
-        const last = tracks[tracks.length - 1];
-        return `订单 #${o.orderId} 物流状态：${last ? `${last.node}（${last.ts.toISOString()}）` : o.logisticsStatus}。`;
-      }
-      return `订单 #${o.orderId} 当前状态：${o.status}，金额 ¥${o.amount}。`;
+    if (CustomerService.isOrderIntent(intent) && session.relatedOrderId) {
+      return this.replyForOrder(session.relatedOrderId, intent === 'logistics');
     }
     if (intent === 'product' && session.relatedProductId) {
-      const products = await this.product.list();
-      const p = products.find((x) => x.id === session.relatedProductId);
-      if (p) return `商品「${p.title}」价格 ¥${p.price ?? '—'}，库存 ${p.stock}。`;
+      return this.replyForProduct(session.relatedProductId);
     }
     return null;
+  }
+
+  /** 订单/物流结构化回复（withLogistics=true 时追加最新物流节点） */
+  private async replyForOrder(orderId: number, withLogistics: boolean): Promise<string> {
+    const o = await this.order.getOrder(orderId);
+    if (!withLogistics) return `订单 #${o.orderId} 当前状态：${o.status}，金额 ¥${o.amount}。`;
+    const tracks = await this.order.getLogisticsTrack(orderId);
+    const last = tracks[tracks.length - 1];
+    return `订单 #${o.orderId} 物流状态：${last ? `${last.node}（${last.ts.toISOString()}）` : o.logisticsStatus}。`;
+  }
+
+  /** 商品结构化回复（读 R 商品列表，未找到返回 null） */
+  private async replyForProduct(productId: number): Promise<string | null> {
+    const products = await this.product.list();
+    const p = products.find((x) => x.id === productId);
+    if (!p) return null;
+    return `商品「${p.title}」价格 ¥${p.price ?? '—'}，库存 ${p.stock}。`;
   }
 
   /** 生成 AI 回复（知识库 → 结构化查询 → 能力网关；低置信度转人工） */

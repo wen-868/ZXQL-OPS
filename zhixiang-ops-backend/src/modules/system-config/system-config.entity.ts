@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 /**
  * 系统配置（配置中心，运营后台「设置 → 系统配置」）。
@@ -24,11 +24,10 @@ export class SystemConfigEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '配置说明' })
   description?: string | null;
 
-  @Column({
-    name: 'updated_at',
-    type: 'datetime',
-    default: () => 'CURRENT_TIMESTAMP(6)',
-    onUpdate: 'CURRENT_TIMESTAMP(6)',
-  })
+  // 与迁移 026 对齐：DATETIME(6)（precision 必须显式声明，否则默认值 CURRENT_TIMESTAMP(6) 在 MySQL 下报 ER_INVALID_DEFAULT）
+  @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6, comment: '创建时间' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'datetime', precision: 6, comment: '更新时间' })
   updatedAt!: Date;
 }

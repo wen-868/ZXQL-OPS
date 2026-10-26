@@ -6,42 +6,51 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { DistributeDto } from './dto/distribute.dto';
 import { RepurchaseDto } from './dto/repurchase.dto';
 import { ok } from '../../shared/response';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('ops')
 @Controller('ops')
 export class PrivateController {
   constructor(private readonly privateService: PrivateService) {}
 
   @Post('fans')
+  @ApiOperation({ summary: 'POST upsertFans' })
   async upsertFans(@Body() dto: UpsertFansDto) {
     return ok(await this.privateService.upsertFans(dto));
   }
 
   @Get('fans')
+  @ApiOperation({ summary: 'GET listFans' })
   async listFans(@Query('platform') platform?: string) {
     return ok(await this.privateService.listFans(platform));
   }
 
   @Post('fans/tags')
+  @ApiOperation({ summary: 'POST tagFans' })
   async tagFans(@Body() dto: TagFansDto) {
     return ok(await this.privateService.tagFans(dto));
   }
 
   @Post('private-groups')
+  @ApiOperation({ summary: 'POST createGroup' })
   async createGroup(@Body() dto: CreateGroupDto) {
     return ok(await this.privateService.createGroup(dto));
   }
 
   @Post('private-groups/:id/push')
+  @ApiOperation({ summary: 'POST pushGroup' })
   async pushGroup(@Param('id') id: string) {
     return ok(await this.privateService.pushGroup(Number(id)));
   }
 
   @Post('fans/distribute')
+  @ApiOperation({ summary: 'POST distribute' })
   async distribute(@Body() dto: DistributeDto) {
     return ok(await this.privateService.distribute(dto));
   }
 
   @Post('fans/repurchase')
+  @ApiOperation({ summary: 'POST repurchase' })
   async repurchase(@Body() dto: RepurchaseDto) {
     return ok(await this.privateService.repurchase(dto));
   }

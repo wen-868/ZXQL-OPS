@@ -27,7 +27,7 @@ import { TenantSubscriber } from '../tenant/tenant.subscriber';
       database: env.DB_NAME,
       charset: 'utf8mb4',
       timezone: 'local',
-      synchronize: env.NODE_ENV !== 'production',
+      synchronize: env.NODE_ENV !== 'production' && !env.OPS_DB_MIGRATIONS_RUN,
       autoLoadEntities: true,
       logging: false,
       // 启动期连接重试与退避

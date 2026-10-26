@@ -181,33 +181,55 @@ export class TopicService {
 
   // —— 更新 / 状态机 ——
 
+  /** 枚举字段校验（非法值即抛对应错误）；供 updateTopic 与 createAbVariant 共用 */
+  private static assertHumanity(value?: string): void {
+    if (value !== undefined && !HUMANITY_DRIVERS.includes(value as HumanityDriver)) {
+      throw new AppError('HUMANITY_INVALID');
+    }
+  }
+
+  private static assertEmotion(value?: string): void {
+    if (value !== undefined && !EMOTION_TYPES.includes(value as EmotionType)) {
+      throw new AppError('EMOTION_INVALID');
+    }
+  }
+
+  /** 状态流转校验：目标态须经状态机允许（未提供则跳过；原地流转视为非法） */
+  private static assertTransition(from: TopicStatus, to?: string): void {
+    if (to !== undefined && !canTransition(from, to as TopicStatus)) {
+      throw new AppError('INVALID_STATUS_TRANSITION');
+    }
+  }
+
+  /** 可直赋标量字段（清单驱动）：标签类已由 assert* 前置校验，语义同为“undefined 跳过” */
+  private static readonly UPDATE_FIELDS: Array<keyof UpdateTopicDto> = [
+    'title',
+    'formulaTags',
+    'score',
+    'accountId',
+    'humanDriver',
+    'emotion',
+  ];
+
+  /** 字段回写：清单字段直赋，日期与状态需各自转换 */
+  private static applyUpdate(topic: TopicEntity, dto: UpdateTopicDto): void {
+    const target = topic as unknown as Record<string, unknown>;
+    for (const field of TopicService.UPDATE_FIELDS) {
+      if (dto[field] !== undefined) target[field] = dto[field];
+    }
+    if (dto.scheduledAt !== undefined) topic.scheduledAt = new Date(dto.scheduledAt);
+    if (dto.status !== undefined) topic.status = dto.status as TopicStatus;
+  }
+
   async updateTopic(id: number, dto: UpdateTopicDto): Promise<TopicEntity> {
     const tenantId = TenantContext.requireTenantId();
     const topic = await this.topicRepo.findOne({ where: { id, tenantId } });
     if (!topic) throw new AppError('TOPIC_NOT_FOUND');
 
-    if (dto.humanDriver !== undefined) {
-      if (!HUMANITY_DRIVERS.includes(dto.humanDriver as HumanityDriver))
-        throw new AppError('HUMANITY_INVALID');
-      topic.humanDriver = dto.humanDriver;
-    }
-    if (dto.emotion !== undefined) {
-      if (!EMOTION_TYPES.includes(dto.emotion as EmotionType))
-        throw new AppError('EMOTION_INVALID');
-      topic.emotion = dto.emotion;
-    }
-    if (dto.title !== undefined) topic.title = dto.title;
-    if (dto.formulaTags !== undefined) topic.formulaTags = dto.formulaTags;
-    if (dto.score !== undefined) topic.score = dto.score;
-    if (dto.scheduledAt !== undefined) topic.scheduledAt = new Date(dto.scheduledAt);
-    if (dto.accountId !== undefined) topic.accountId = dto.accountId;
-
-    if (dto.status !== undefined) {
-      if (!canTransition(topic.status, dto.status as TopicStatus)) {
-        throw new AppError('INVALID_STATUS_TRANSITION');
-      }
-      topic.status = dto.status as TopicStatus;
-    }
+    TopicService.assertHumanity(dto.humanDriver);
+    TopicService.assertEmotion(dto.emotion);
+    TopicService.assertTransition(topic.status, dto.status);
+    TopicService.applyUpdate(topic, dto);
     return this.topicRepo.save(topic);
   }
 
@@ -219,27 +241,34 @@ export class TopicService {
     const base = await this.topicRepo.findOne({ where: { id, tenantId } });
     if (!base) throw new AppError('TOPIC_NOT_FOUND');
     if (base.abVariantOf) throw new AppError('INVALID_AB_VARIANT_CYCLE');
+    TopicService.assertHumanity(dto.humanDriver);
+    TopicService.assertEmotion(dto.emotion);
 
-    if (
-      dto.humanDriver !== undefined &&
-      !HUMANITY_DRIVERS.includes(dto.humanDriver as HumanityDriver)
-    ) {
-      throw new AppError('HUMANITY_INVALID');
-    }
-    if (dto.emotion !== undefined && !EMOTION_TYPES.includes(dto.emotion as EmotionType)) {
-      throw new AppError('EMOTION_INVALID');
-    }
+    const variant = this.topicRepo.create(this.buildVariantFields(tenantId, base, dto));
+    if (dto.scheduledAt) variant.scheduledAt = new Date(dto.scheduledAt);
+    if (dto.accountId) variant.accountId = dto.accountId;
+    return this.topicRepo.save(variant);
+  }
 
-    const variant = this.topicRepo.create({
+  /** A/B 变体字段构造：dto 覆盖优先，未指定继承基准 */
+  private buildVariantFields(
+    tenantId: string,
+    base: TopicEntity,
+    dto: AbVariantDto,
+  ): Partial<TopicEntity> {
+    const title = dto.title ?? `${base.title} (A/B)`;
+    const humanDriver = dto.humanDriver ?? base.humanDriver;
+    return {
       tenantId,
       analysisId: base.analysisId,
+      // 归因种子沿用「原始标题（未加 A/B 后缀）」，与历史数据保持一致
       attributionId: generateAttributionId(
         tenantId,
         'content',
-        `${dto.title ?? base.title}|${dto.humanDriver ?? base.humanDriver}|${Date.now()}`,
+        `${dto.title ?? base.title}|${humanDriver}|${Date.now()}`,
       ),
-      title: dto.title ?? `${base.title} (A/B)`,
-      humanDriver: dto.humanDriver ?? base.humanDriver,
+      title,
+      humanDriver,
       emotion: dto.emotion ?? base.emotion,
       formulaTags: dto.formulaTags ?? base.formulaTags,
       status: TopicStatus.Idea,
@@ -247,10 +276,7 @@ export class TopicService {
       abVariantOf: base.id,
       promptVersion: PROMPT_VERSION,
       modelUsed: '',
-    });
-    if (dto.scheduledAt) variant.scheduledAt = new Date(dto.scheduledAt);
-    if (dto.accountId) variant.accountId = dto.accountId;
-    return this.topicRepo.save(variant);
+    };
   }
 
   // —— 排期 ——

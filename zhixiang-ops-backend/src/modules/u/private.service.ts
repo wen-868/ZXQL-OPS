@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TenantContext } from '../../tenant/tenant-context';
@@ -47,6 +47,30 @@ export class PrivateService {
     };
   }
 
+  /**
+   * 新建分支字段：undefined/空 均回落到列默认值语义
+   * （与 update 分支的“仅真值覆盖”区分，故独立于此）
+   */
+  private buildNewFans(tenantId: string, dto: UpsertFansDto): FansProfileEntity {
+    return this.fansRepo.create({
+      tenantId,
+      platform: dto.platform,
+      publicId: dto.publicId,
+      level: dto.level ?? 'normal',
+      interactAgg: dto.interactAgg ?? null,
+      tags: dto.tags ?? null,
+      source: dto.source ?? 'aggregate',
+    });
+  }
+
+  /** 已存在分支字段覆盖：仅当 dto 该字段为真值时覆盖（保留既有值） */
+  private static readonly FANS_PATCH_FIELDS: Array<'level' | 'interactAgg' | 'tags' | 'source'> = [
+    'level',
+    'interactAgg',
+    'tags',
+    'source',
+  ];
+
   /** 粉丝画像 upsert（仅聚合/公开字段，合规 §11②：禁个体隐私） */
   async upsertFans(dto: UpsertFansDto): Promise<FansProfileView> {
     const tenantId = TenantContext.requireTenantId();
@@ -54,20 +78,12 @@ export class PrivateService {
       where: { tenantId, platform: dto.platform, publicId: dto.publicId },
     });
     if (!e) {
-      e = this.fansRepo.create({
-        tenantId,
-        platform: dto.platform,
-        publicId: dto.publicId,
-        level: dto.level ?? 'normal',
-        interactAgg: dto.interactAgg ?? null,
-        tags: dto.tags ?? null,
-        source: dto.source ?? 'aggregate',
-      });
+      e = this.buildNewFans(tenantId, dto);
     } else {
-      if (dto.level) e.level = dto.level;
-      if (dto.interactAgg) e.interactAgg = dto.interactAgg;
-      if (dto.tags) e.tags = dto.tags;
-      if (dto.source) e.source = dto.source;
+      const target = e as unknown as Record<string, unknown>;
+      for (const field of PrivateService.FANS_PATCH_FIELDS) {
+        if (dto[field]) target[field] = dto[field];
+      }
     }
     const saved = await this.fansRepo.save(e);
     await this.audit.record({

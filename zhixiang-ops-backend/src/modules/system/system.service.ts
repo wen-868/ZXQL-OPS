@@ -28,36 +28,38 @@ export interface InitStep {
   detail?: string;
 }
 
+// 业务模块权限清单：dashboard 仅可读，其余模块可读写（A6 去重，顺序即数组顺序）
+const BIZ_MODULES = [
+  ['account', true],
+  ['intel', true],
+  ['analyze', true],
+  ['topic', true],
+  ['script', true],
+  ['publish', true],
+  ['workflow', true],
+  ['recycle', true],
+  ['dashboard', false],
+  ['selection', true],
+  ['product', true],
+  ['live', true],
+  ['ad', true],
+  ['order', true],
+  ['cs', true],
+] as const;
+
+/** 按模块生成权限串：readonlyOnly=true 只生成 :read（viewer），否则按可写标记补 :write */
+function buildBizPermissions(readonlyOnly: boolean): string[] {
+  return BIZ_MODULES.flatMap(([module, writable]) => {
+    const perms = [`${module}:read`];
+    if (!readonlyOnly && writable) perms.push(`${module}:write`);
+    return perms;
+  });
+}
+
+const VIEWER_PERMISSIONS = buildBizPermissions(true);
+const EDITOR_PERMISSIONS = buildBizPermissions(false);
 const ADMIN_PERMISSIONS = [
-  'account:read',
-  'account:write',
-  'intel:read',
-  'intel:write',
-  'analyze:read',
-  'analyze:write',
-  'topic:read',
-  'topic:write',
-  'script:read',
-  'script:write',
-  'publish:read',
-  'publish:write',
-  'workflow:read',
-  'workflow:write',
-  'recycle:read',
-  'recycle:write',
-  'dashboard:read',
-  'selection:read',
-  'selection:write',
-  'product:read',
-  'product:write',
-  'live:read',
-  'live:write',
-  'ad:read',
-  'ad:write',
-  'order:read',
-  'order:write',
-  'cs:read',
-  'cs:write',
+  ...EDITOR_PERMISSIONS,
   'role:read',
   'role:write',
   'role:manage',
@@ -67,54 +69,6 @@ const ADMIN_PERMISSIONS = [
   'system:manage',
   'llm:manage',
   'compliance:manage',
-];
-const EDITOR_PERMISSIONS = [
-  'account:read',
-  'account:write',
-  'intel:read',
-  'intel:write',
-  'analyze:read',
-  'analyze:write',
-  'topic:read',
-  'topic:write',
-  'script:read',
-  'script:write',
-  'publish:read',
-  'publish:write',
-  'workflow:read',
-  'workflow:write',
-  'recycle:read',
-  'recycle:write',
-  'dashboard:read',
-  'selection:read',
-  'selection:write',
-  'product:read',
-  'product:write',
-  'live:read',
-  'live:write',
-  'ad:read',
-  'ad:write',
-  'order:read',
-  'order:write',
-  'cs:read',
-  'cs:write',
-];
-const VIEWER_PERMISSIONS = [
-  'account:read',
-  'intel:read',
-  'analyze:read',
-  'topic:read',
-  'script:read',
-  'publish:read',
-  'workflow:read',
-  'recycle:read',
-  'dashboard:read',
-  'selection:read',
-  'product:read',
-  'live:read',
-  'ad:read',
-  'order:read',
-  'cs:read',
 ];
 
 const DEFAULT_ROLES = [

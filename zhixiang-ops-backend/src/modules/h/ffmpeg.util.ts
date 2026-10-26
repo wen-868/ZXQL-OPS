@@ -6,36 +6,49 @@ export interface FfmpegResult {
   stderr: string;
 }
 
-/** 探测本机 ffmpeg 二进制路径，依次检查：环境变量 → which/where → 常见安装路径 */
-function detectFfmpegPath(): string | null {
-  // 1) 环境变量显式指定
-  const envPath = process.env['OPS_FFMPEG_PATH'];
-  if (envPath && existsSync(envPath)) return envPath;
+/** 常见安装路径候选（按平台区分） */
+function candidateFfmpegPaths(): string[] {
+  return process.platform === 'win32'
+    ? [
+        'C:\\ffmpeg\\bin\\ffmpeg.exe',
+        'C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe',
+        'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe',
+      ]
+    : ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg'];
+}
 
-  // 2) 系统 PATH 查找
+/** 1) 环境变量显式指定（运维配置，非用户输入） */
+function ffmpegPathFromEnv(): string | null {
+  const envPath = process.env['OPS_FFMPEG_PATH'];
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  return envPath && existsSync(envPath) ? envPath : null;
+}
+
+/** 2) 系统 PATH 查找（which/where） */
+function ffmpegPathFromPath(): string | null {
   try {
     const cmd = process.platform === 'win32' ? 'where ffmpeg' : 'which ffmpeg';
     const out = execSync(cmd, { encoding: 'utf-8', timeout: 3000 }).trim();
-    if (out) return out.split('\n')[0].trim();
+    return out ? out.split('\n')[0].trim() : null;
   } catch {
     /* not in PATH */
+    return null;
   }
+}
 
-  // 3) 常见安装路径探测
-  const candidates =
-    process.platform === 'win32'
-      ? [
-          'C:\\ffmpeg\\bin\\ffmpeg.exe',
-          'C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe',
-          'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe',
-        ]
-      : ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg'];
-
-  for (const p of candidates) {
+/** 3) 常见安装路径探测 */
+function ffmpegPathFromCandidates(): string | null {
+  for (const p of candidateFfmpegPaths()) {
+    // p 来自硬编码候选列表
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     if (existsSync(p)) return p;
   }
-
   return null;
+}
+
+/** 探测本机 ffmpeg 二进制路径，依次检查：环境变量 → which/where → 常见安装路径 */
+function detectFfmpegPath(): string | null {
+  return ffmpegPathFromEnv() ?? ffmpegPathFromPath() ?? ffmpegPathFromCandidates();
 }
 
 let _ffmpegPath: string | null | undefined; // undefined=未探测

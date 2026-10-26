@@ -172,4 +172,29 @@ describe('VideoService（H 智能成片 / 验收点 H-01~08）', () => {
     );
     expect(videoRepo.findOne).toHaveBeenCalledWith({ where: { id: 1, tenantId: TENANT } });
   });
+
+  /** H-09 安全：越界素材路径不进入 FFmpeg（防路径穿越） */
+  it('越界本地素材路径被过滤，不拼进 FFmpeg concat', async () => {
+    // 恶意素材：指向系统敏感文件的绝对路径
+    (materialRepo.find as jest.Mock).mockResolvedValue([
+      { id: 1, type: 'video', url: '/etc/passwd', status: 'uploaded' },
+    ]);
+    const concatContents: string[] = [];
+    // 拦截 concat 文件写入，断言未包含越界路径
+    const fs = require('fs');
+    const spy = jest.spyOn(fs, 'writeFileSync').mockImplementation((p: any, data: any) => {
+      if (String(p).includes('concat_')) concatContents.push(String(data));
+    });
+
+    try {
+      await TenantContext.run({ tenantId: TENANT, traceId: 'x' }, () =>
+        service.fromScript({ scriptId: 1, materialIds: [1] } as any),
+      );
+      const all = concatContents.join('\n');
+      expect(all).not.toContain('/etc/passwd');
+    } finally {
+      spy.mockRestore();
+      (materialRepo.find as jest.Mock).mockResolvedValue([]);
+    }
+  });
 });

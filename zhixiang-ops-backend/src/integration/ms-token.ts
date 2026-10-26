@@ -22,10 +22,12 @@ export interface MsTokenPayload {
 
 /**
  * 校验管理系统 JWT：仅接受 zhixiang-system 签发的 token。
+ * 验签密钥取 OPS_MS_JWT_SECRET（缺省回退 JWT_SECRET，兼容两系统共用密钥的部署）。
+ * 配置独立密钥可避免「任一系统凭据泄露即双向伪造 token」的横向风险。
  * 校验失败统一抛 401（由调用方转 AUTH_MS_TOKEN_INVALID）。
  */
 export function verifyMsToken(token: string): MsTokenPayload {
-  return jwt.verify(token, env.JWT_SECRET, {
+  return jwt.verify(token, env.OPS_MS_JWT_SECRET || env.JWT_SECRET, {
     algorithms: ['HS256'],
     issuer: MS_JWT_ISSUER,
     audience: MS_JWT_AUDIENCE,

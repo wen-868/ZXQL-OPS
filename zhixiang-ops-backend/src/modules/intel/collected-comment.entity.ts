@@ -1,6 +1,6 @@
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from '../../database/base.entity';
-import { CollectSourceType } from './intel.types';
+import { CollectSourceType, CommentReviewStatus } from './intel.types';
 
 /**
  * 采集评论实体（规划 §4-C / ops_collected_comments）。
@@ -34,6 +34,11 @@ export class CollectedCommentEntity extends BaseEntity {
   /** 是否通过清洗（无广告 / 无隐私命中） */
   @Column({ name: 'is_clean', type: 'boolean', default: true })
   isClean: boolean;
+
+  /** 审核状态：pending 待审 / approved 通过（D 人性分析只消费 approved）/ rejected 弃用 */
+  @Index()
+  @Column({ name: 'review_status', type: 'varchar', length: 16, default: 'approved' })
+  reviewStatus: CommentReviewStatus;
 
   /** 清洗结果 JSON：{ piiRemoved: string[], ad: boolean } */
   @Column({ name: 'clean_result', type: 'json', nullable: true })

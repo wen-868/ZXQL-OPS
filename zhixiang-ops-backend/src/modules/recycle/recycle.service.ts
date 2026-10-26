@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, SelectQueryBuilder } from 'typeorm';
 import { AppError } from '../../shared/app-error';
 import { TenantContext } from '../../tenant/tenant-context';
 import { PublishTaskEntity } from '../publish/publish.entity';
@@ -154,6 +154,37 @@ export class RecycleService {
 
   // —— 看板 ——
 
+  /** 反馈指标累计（?? 缺省 0 的读取集中于此，主函数不再背分支） */
+  private static sumMetrics(feedbacks: FeedbackEntity[]): {
+    totalPlay: number;
+    completeSum: number;
+    totalInteract: number;
+    totalFanInc: number;
+    totalCommission: number;
+  } {
+    const acc = {
+      totalPlay: 0,
+      completeSum: 0,
+      totalInteract: 0,
+      totalFanInc: 0,
+      totalCommission: 0,
+    };
+    for (const f of feedbacks) {
+      const m = f.metrics ?? {};
+      acc.totalPlay += m.play ?? 0;
+      acc.completeSum += m.completeRate ?? 0;
+      acc.totalInteract += m.interact ?? 0;
+      acc.totalFanInc += m.fanInc ?? 0;
+      acc.totalCommission += m.commission ?? 0;
+    }
+    return acc;
+  }
+
+  /** 占比率：分母为 0 时回落 0，保留 4 位小数 */
+  private static rate(num: number, den: number): number {
+    return den ? Number((num / den).toFixed(4)) : 0;
+  }
+
   async getDashboardOverview(): Promise<{
     totalPlay: number;
     avgCompleteRate: number;
@@ -169,34 +200,20 @@ export class RecycleService {
     const tenantId = TenantContext.requireTenantId();
     const feedbacks = await this.feedbackRepo.find({ where: { tenantId } });
     if (!feedbacks.length) throw new AppError('RECYCLE_NO_DATA');
-    let totalPlay = 0;
-    let totalInteract = 0;
-    let totalFanInc = 0;
-    let totalCommission = 0;
-    let completeSum = 0;
-    for (const f of feedbacks) {
-      const m = f.metrics ?? {};
-      totalPlay += m.play ?? 0;
-      completeSum += m.completeRate ?? 0;
-      totalInteract += m.interact ?? 0;
-      totalFanInc += m.fanInc ?? 0;
-      totalCommission += m.commission ?? 0;
-    }
+
+    const acc = RecycleService.sumMetrics(feedbacks);
     const n = feedbacks.length;
-    const avgCompleteRate = Number((completeSum / n).toFixed(4));
-    const interactRate = totalPlay ? Number((totalInteract / totalPlay).toFixed(4)) : 0;
-    const fanRate = totalPlay ? Number((totalFanInc / totalPlay).toFixed(4)) : 0;
-    const conversionRate = totalPlay ? Number((totalCommission / totalPlay).toFixed(4)) : 0;
+    const avgCompleteRate = Number((acc.completeSum / n).toFixed(4));
     return {
-      totalPlay,
+      totalPlay: acc.totalPlay,
       avgCompleteRate,
-      totalInteract,
-      totalFanInc,
-      totalCommission,
+      totalInteract: acc.totalInteract,
+      totalFanInc: acc.totalFanInc,
+      totalCommission: acc.totalCommission,
       completeRate: avgCompleteRate,
-      interactRate,
-      fanRate,
-      conversionRate,
+      interactRate: RecycleService.rate(acc.totalInteract, acc.totalPlay),
+      fanRate: RecycleService.rate(acc.totalFanInc, acc.totalPlay),
+      conversionRate: RecycleService.rate(acc.totalCommission, acc.totalPlay),
       videoCount: n,
     };
   }
@@ -234,11 +251,8 @@ export class RecycleService {
 
   // —— 回流再分析 ——
 
-  async rerunAnalysis(): Promise<{ analysisId: number; traceId: string; feedbackCount: number }> {
-    const tenantId = TenantContext.requireTenantId();
-    const feedbacks = await this.feedbackRepo.find({ where: { tenantId } });
-    if (!feedbacks.length) throw new AppError('RECYCLE_NO_DATA');
-
+  /** 按 attributionId 归并有评论的反馈（无评论的反馈跳过） */
+  private static groupCommentsByAttribution(feedbacks: FeedbackEntity[]): Map<string, string[]> {
     const byAttr = new Map<string, string[]>();
     for (const f of feedbacks) {
       if (!f.comments?.length) continue;
@@ -246,6 +260,15 @@ export class RecycleService {
       list.push(...f.comments);
       byAttr.set(f.attributionId, list);
     }
+    return byAttr;
+  }
+
+  async rerunAnalysis(): Promise<{ analysisId: number; traceId: string; feedbackCount: number }> {
+    const tenantId = TenantContext.requireTenantId();
+    const feedbacks = await this.feedbackRepo.find({ where: { tenantId } });
+    if (!feedbacks.length) throw new AppError('RECYCLE_NO_DATA');
+
+    const byAttr = RecycleService.groupCommentsByAttribution(feedbacks);
     if (!byAttr.size) throw new AppError('RECYCLE_NO_DATA');
 
     let analysisId = 0;
@@ -261,6 +284,27 @@ export class RecycleService {
 
   // —— 内部 ——
 
+  /** 解析数字型 targetRef（空白/非数字抛 RECYCLE_TARGET_INVALID） */
+  private static parseTargetRef(targetRef: string): number {
+    const ref = Number(targetRef);
+    if (targetRef.trim() === '' || !Number.isFinite(ref)) {
+      throw new AppError('RECYCLE_TARGET_INVALID');
+    }
+    return ref;
+  }
+
+  /** 按回收范围追加过滤（video 按任务 id / account 按发布账号；全量范围不加过滤） */
+  private applyScopeFilter(
+    qb: SelectQueryBuilder<PublishTaskEntity>,
+    task: RecycleTaskEntity,
+  ): void {
+    if (task.scope === RecycleScope.Video) {
+      qb.andWhere('p.id = :id', { id: RecycleService.parseTargetRef(task.targetRef) });
+    } else if (task.scope === RecycleScope.Account) {
+      qb.andWhere('p.account_id = :acc', { acc: RecycleService.parseTargetRef(task.targetRef) });
+    }
+  }
+
   private async runCollection(
     task: RecycleTaskEntity,
   ): Promise<{ videoCount: number; commentCount: number }> {
@@ -268,21 +312,8 @@ export class RecycleService {
     const qb = this.publishRepo
       .createQueryBuilder('p')
       .where('p.tenant_id = :tenantId', { tenantId });
-    if (task.scope === RecycleScope.Video) {
-      const ref = Number(task.targetRef);
-      if (task.targetRef.trim() !== '' && Number.isFinite(ref)) {
-        qb.andWhere('p.id = :id', { id: ref });
-      } else {
-        throw new AppError('RECYCLE_TARGET_INVALID');
-      }
-    } else if (task.scope === RecycleScope.Account) {
-      const accId = Number(task.targetRef);
-      if (task.targetRef.trim() !== '' && Number.isFinite(accId)) {
-        qb.andWhere('p.account_id = :acc', { acc: accId });
-      } else {
-        throw new AppError('RECYCLE_TARGET_INVALID');
-      }
-    }
+    this.applyScopeFilter(qb, task);
+
     const publishes = await qb.getMany();
     let videoCount = 0;
     let commentCount = 0;
@@ -296,44 +327,107 @@ export class RecycleService {
     return { videoCount, commentCount };
   }
 
-  private async collectOne(
-    pub: PublishTaskEntity,
-    tenantId: string,
-  ): Promise<FeedbackEntity | null> {
-    const script = pub.scriptId
-      ? await this.scriptRepo.findOne({ where: { id: pub.scriptId, tenantId } })
-      : null;
-    const topic = script?.topicId
-      ? await this.topicRepo.findOne({ where: { id: script.topicId, tenantId } })
-      : null;
-    const seed = hashSeed(pub.extPostId || `${pub.id}`);
+  /** 模拟「五维」回流指标（ext_post_id 为确定性种子，同一发布多次回收结果稳定） */
+  private static mockMetrics(extPostId: string | null | undefined, pubId: number): RecycleMetrics {
+    const seed = hashSeed(extPostId || `${pubId}`);
     const play = 1000 + (seed % 90000);
-    const metrics: RecycleMetrics = {
+    return {
       play,
       completeRate: Number((0.3 + (seed % 6000) / 10000).toFixed(4)),
       interact: Math.floor(play * (0.02 + (seed % 600) / 10000)),
       fanInc: Math.floor(play * 0.01),
       commission: Number((play * 0.0005 * (1 + (seed % 100) / 100)).toFixed(2)),
     };
+  }
+
+  /** 由发布任务回溯关联 选题（脚本缺失/无 topicId 时为 null） */
+  private async resolveTopic(
+    pub: PublishTaskEntity,
+    tenantId: string,
+  ): Promise<TopicEntity | null> {
+    const script = pub.scriptId
+      ? await this.scriptRepo.findOne({ where: { id: pub.scriptId, tenantId } })
+      : null;
+    if (!script?.topicId) return null;
+    return this.topicRepo.findOne({ where: { id: script.topicId, tenantId } });
+  }
+
+  /** 模拟评论（按选题人性/情绪取值，缺失回落默认标签） */
+  private static mockComments(topic: TopicEntity | null): string[] {
     const driverLabel = topic?.humanDriver ?? '贪';
     const emotionLabel = topic?.emotion ?? '好奇';
-    const comments = [
+    return [
       `这条讲${driverLabel}的内容太戳我了，${emotionLabel}到不行`,
       `看完直接下单了，求${driverLabel}更多选题`,
       `第N次刷到，还是被${emotionLabel}到`,
     ];
+  }
+
+  private async collectOne(
+    pub: PublishTaskEntity,
+    tenantId: string,
+  ): Promise<FeedbackEntity | null> {
+    const topic = await this.resolveTopic(pub, tenantId);
     const feedback = this.feedbackRepo.create({
       tenantId,
       topicId: topic?.id ?? null,
       videoId: pub.id,
       platform: pub.platform,
       attributionId: pub.attributionId, // 透传 I：F→I→J 只读，禁止重生成
-      metrics,
-      comments,
+      metrics: RecycleService.mockMetrics(pub.extPostId, pub.id),
+      comments: RecycleService.mockComments(topic),
       reAnalysisId: null,
       collectedAt: new Date(),
     });
     return this.feedbackRepo.save(feedback);
+  }
+
+  /** 效能分组桶（按 人性|情绪 聚合的指标样本） */
+  private static newBucket(driver: string, emotion: string) {
+    return {
+      driver,
+      emotion,
+      plays: [] as number[],
+      completes: [] as number[],
+      interacts: [] as number[],
+      conversions: [] as number[],
+      count: 0,
+    };
+  }
+
+  /** 指标读取：null/undefined 回落 0（?? 分支集中于此，聚合主流程不再背分支） */
+  private static numOrZero(v: number | null | undefined): number {
+    return v ?? 0;
+  }
+
+  /** 单条反馈样本并入分组桶（五维指标的 ?? 缺省集中于此） */
+  private static pushSample(
+    grp: ReturnType<typeof RecycleService.newBucket>,
+    m: RecycleMetrics,
+  ): void {
+    grp.plays.push(RecycleService.numOrZero(m.play));
+    grp.completes.push(RecycleService.numOrZero(m.completeRate));
+    grp.interacts.push(RecycleService.numOrZero(m.interact));
+    grp.conversions.push(RecycleService.numOrZero(m.commission));
+    grp.count += 1;
+  }
+
+  /** 按 (人性,情绪) 聚合反馈样本（topic 已删的反馈跳过） */
+  private static groupByDriver(
+    feedbacks: FeedbackEntity[],
+    topicMap: Map<number, TopicEntity>,
+  ): Map<string, ReturnType<typeof RecycleService.newBucket>> {
+    const groups = new Map<string, ReturnType<typeof RecycleService.newBucket>>();
+    for (const f of feedbacks) {
+      if (f.topicId == null) continue;
+      const topic = topicMap.get(f.topicId);
+      if (!topic) continue;
+      const key = `${topic.humanDriver}|${topic.emotion}`;
+      const grp = groups.get(key) ?? RecycleService.newBucket(topic.humanDriver, topic.emotion);
+      RecycleService.pushSample(grp, f.metrics ?? {});
+      groups.set(key, grp);
+    }
+    return groups;
   }
 
   /** 按 (人性,情绪) 聚合反馈，计算人性效能并 upsert 到 ops_driver_efficiency（window=day） */
@@ -347,48 +441,15 @@ export class RecycleService {
       ? await this.topicRepo.find({ where: { tenantId, id: In(topicIds) } })
       : [];
     const topicMap = new Map(topics.map((t) => [t.id, t]));
-
-    const groups = new Map<
-      string,
-      {
-        driver: string;
-        emotion: string;
-        plays: number[];
-        completes: number[];
-        interacts: number[];
-        conversions: number[];
-        count: number;
-      }
-    >();
-    for (const f of feedbacks) {
-      const topic = f.topicId != null ? topicMap.get(f.topicId) : undefined;
-      if (!topic) continue;
-      const key = `${topic.humanDriver}|${topic.emotion}`;
-      const m = f.metrics ?? {};
-      const grp = groups.get(key) ?? {
-        driver: topic.humanDriver,
-        emotion: topic.emotion,
-        plays: [],
-        completes: [],
-        interacts: [],
-        conversions: [],
-        count: 0,
-      };
-      grp.plays.push(m.play ?? 0);
-      grp.completes.push(m.completeRate ?? 0);
-      grp.interacts.push(m.interact ?? 0);
-      grp.conversions.push(m.commission ?? 0);
-      grp.count += 1;
-      groups.set(key, grp);
-    }
+    const groups = RecycleService.groupByDriver(feedbacks, topicMap);
 
     const avg = (a: number[]): number => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);
+    const rate = (num: number, den: number): number => (den ? Number((num / den).toFixed(4)) : 0);
     const today = startOfToday();
     const rows: DriverEfficiencyEntity[] = [];
     for (const grp of groups.values()) {
-      const totalPlay = grp.plays.reduce((s, x) => s + x, 0);
-      const totalInteract = grp.interacts.reduce((s, x) => s + x, 0);
-      const totalCommission = grp.conversions.reduce((s, x) => s + x, 0);
+      const sum = (a: number[]): number => a.reduce((s, x) => s + x, 0);
+      const totalPlay = sum(grp.plays);
       rows.push(
         this.driverEfficiencyRepo.create({
           tenantId,
@@ -397,8 +458,8 @@ export class RecycleService {
           sampleCount: grp.count,
           avgPlay: Math.round(avg(grp.plays)),
           avgCompleteRate: Number(avg(grp.completes).toFixed(4)),
-          avgInteractRate: totalPlay ? Number((totalInteract / totalPlay).toFixed(4)) : 0,
-          avgConversion: totalPlay ? Number((totalCommission / totalPlay).toFixed(4)) : 0,
+          avgInteractRate: rate(sum(grp.interacts), totalPlay),
+          avgConversion: rate(sum(grp.conversions), totalPlay),
           window: 'day',
           statDate: today,
         }),

@@ -4,6 +4,11 @@ import { env } from '../config/env';
 import { MS_JWT_ISSUER, MS_JWT_AUDIENCE, MsTokenPayload } from '../integration/ms-token';
 import { AppError } from '../shared/app-error';
 import { signToken } from './auth-user';
+import {
+  LoginRateLimitService,
+  LOGIN_MAX_FAILS,
+  LOGIN_LOCK_MS,
+} from '../cache/login-rate-limit.service';
 
 /**
  * SSO 对接单测（统一管理后台方案 §4.2）。
@@ -28,6 +33,27 @@ function signMsToken(payload: Partial<MsTokenPayload> = {}): string {
       expiresIn: '1h',
     },
   );
+}
+
+/** Redis 不可用时的真实限流服务（走内存兜底），用于穿透式验证 AuthService 防爆破 */
+function memoryFallbackRateLimit(): LoginRateLimitService {
+  const redis = {
+    get: jest.fn().mockRejectedValue(new Error('redis down')),
+    incr: jest.fn().mockRejectedValue(new Error('redis down')),
+    expire: jest.fn(),
+    setJson: jest.fn(),
+    del: jest.fn().mockRejectedValue(new Error('redis down')),
+  } as never;
+  return new LoginRateLimitService(redis);
+}
+
+/** 无锁定的限流桩（SSO 用例不需要验证限流） */
+function noopRateLimit(): LoginRateLimitService {
+  return {
+    assertAllowed: jest.fn().mockResolvedValue(undefined),
+    recordFailure: jest.fn().mockResolvedValue(undefined),
+    reset: jest.fn().mockResolvedValue(undefined),
+  } as never;
 }
 
 function buildService(
@@ -67,6 +93,7 @@ function buildService(
       roleBindRepo as never,
       tenantBindRepo as never,
       demoService as never,
+      noopRateLimit(),
     ),
     userRepo,
     roleBindRepo,
@@ -186,5 +213,160 @@ describe('AuthService.sso（管理系统 SSO 对接）', () => {
 
   it('依赖未注入时 AppError 类型正确（回归保护）', () => {
     expect(AppError).toBeDefined();
+  });
+});
+
+describe('AuthService.login（登录防爆破限流）', () => {
+  let passwordHash: string;
+  beforeAll(async () => {
+    const { hash } = await import('bcryptjs');
+    passwordHash = await hash('password', 10);
+  });
+
+  const validUser = () => ({
+    id: 1,
+    username: 'admin',
+    password: passwordHash,
+    realName: '管理员',
+    role: 'ops_admin',
+    tenantId: 't_dev',
+    type: 'standalone',
+  });
+
+  function buildLoginService() {
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue(validUser()),
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+    const roleBindRepo = { find: jest.fn().mockResolvedValue([]) };
+    const tenantBindRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    const demoService = { ensureDemoUser: jest.fn() };
+    return new AuthService(
+      userRepo as never,
+      roleBindRepo as never,
+      tenantBindRepo as never,
+      demoService as never,
+      memoryFallbackRateLimit(),
+    );
+  }
+
+  it('连续失败 5 次后锁定（429 TOO_MANY_REQUESTS），窗口内拒绝', async () => {
+    const service = buildLoginService();
+    for (let i = 0; i < LOGIN_MAX_FAILS; i += 1) {
+      await expect(service.login({ username: 'admin', password: 'wrong' })).rejects.toMatchObject({
+        code: 'AUTH_INVALID_PASSWORD',
+      });
+    }
+    await expect(service.login({ username: 'admin', password: 'right' })).rejects.toMatchObject({
+      code: 'TOO_MANY_REQUESTS',
+      httpStatus: 429,
+    });
+  }, 30_000);
+
+  it('锁定窗口过期后自动解除（惰性清理）', async () => {
+    const service = buildLoginService();
+    for (let i = 0; i < LOGIN_MAX_FAILS; i += 1) {
+      await expect(service.login({ username: 'admin', password: 'wrong' })).rejects.toMatchObject({
+        code: 'AUTH_INVALID_PASSWORD',
+      });
+    }
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + LOGIN_LOCK_MS + 1000);
+    const r = await service.login({ username: 'admin', password: 'password' });
+    expect(r.token).toBeTruthy();
+    jest.restoreAllMocks();
+  }, 30_000);
+
+  it('登录成功响应携带 CSRF 令牌（C2 前端注入使用）', async () => {
+    const service = buildLoginService();
+    const r = await service.login({ username: 'admin', password: 'password' });
+    expect(typeof r.csrfToken).toBe('string');
+    expect(r.csrfToken).toContain('.');
+  }, 30_000);
+
+  it('登录成功后清零失败计数', async () => {
+    const service = buildLoginService();
+    await expect(service.login({ username: 'admin', password: 'wrong' })).rejects.toMatchObject({
+      code: 'AUTH_INVALID_PASSWORD',
+    });
+    const r = await service.login({ username: 'admin', password: 'password' });
+    expect(r.token).toBeTruthy();
+    await expect(service.login({ username: 'admin', password: 'wrong' })).rejects.toMatchObject({
+      code: 'AUTH_INVALID_PASSWORD',
+    });
+  }, 30_000);
+
+  it('用户名不存在同样计数（防用户名枚举爆破）', async () => {
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+    const roleBindRepo = { find: jest.fn().mockResolvedValue([]) };
+    const tenantBindRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    const demoService = { ensureDemoUser: jest.fn() };
+    const service = new AuthService(
+      userRepo as never,
+      roleBindRepo as never,
+      tenantBindRepo as never,
+      demoService as never,
+      memoryFallbackRateLimit(),
+    );
+    for (let i = 0; i < LOGIN_MAX_FAILS; i += 1) {
+      await expect(service.login({ username: 'nobody', password: 'x' })).rejects.toMatchObject({
+        code: 'AUTH_USER_NOT_FOUND',
+      });
+    }
+    await expect(service.login({ username: 'nobody', password: 'x' })).rejects.toMatchObject({
+      code: 'TOO_MANY_REQUESTS',
+    });
+  }, 30_000);
+
+  it('注册失败同样计数，达到阈值锁定（覆盖 register 入口）', async () => {
+    const userRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 9, username: 'dup' }),
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+    const roleBindRepo = { find: jest.fn().mockResolvedValue([]) };
+    const tenantBindRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    const demoService = { ensureDemoUser: jest.fn() };
+    const service = new AuthService(
+      userRepo as never,
+      roleBindRepo as never,
+      tenantBindRepo as never,
+      demoService as never,
+      memoryFallbackRateLimit(),
+    );
+    for (let i = 0; i < LOGIN_MAX_FAILS; i += 1) {
+      await expect(service.register({ username: 'dup', password: 'x' })).rejects.toMatchObject({
+        code: 'AUTH_USER_EXISTS',
+      });
+    }
+    await expect(service.register({ username: 'dup', password: 'x' })).rejects.toMatchObject({
+      code: 'TOO_MANY_REQUESTS',
+    });
+  }, 30_000);
+
+  it('OPS_ALLOW_REGISTER=false 时注册被拒绝（REGISTER_DISABLED）', async () => {
+    const prev = env.allowRegister;
+    (env as { allowRegister: boolean }).allowRegister = false;
+    try {
+      const userRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() };
+      const service = new AuthService(
+        userRepo as never,
+        { find: jest.fn() } as never,
+        { findOne: jest.fn() } as never,
+        { ensureDemoUser: jest.fn() } as never,
+        memoryFallbackRateLimit(),
+      );
+      // 开关关闭时不应触达仓库（防绕过），直接 403
+      await expect(service.register({ username: 'x', password: 'x' })).rejects.toMatchObject({
+        code: 'REGISTER_DISABLED',
+      });
+      expect(userRepo.findOne).not.toHaveBeenCalled();
+    } finally {
+      (env as { allowRegister: boolean }).allowRegister = prev;
+    }
   });
 });

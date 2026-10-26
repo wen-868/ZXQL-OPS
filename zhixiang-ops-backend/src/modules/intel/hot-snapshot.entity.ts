@@ -12,7 +12,7 @@ export class HotSnapshotEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 32 })
   platform: string;
 
-  @Column({ type: 'varchar', length: 16 })
+  @Column({ name: 'hot_type', type: 'varchar', length: 16 })
   hotType: HotType;
 
   @Column({ type: 'varchar', length: 256 })
@@ -24,6 +24,6 @@ export class HotSnapshotEntity extends BaseEntity {
   @Column({ type: 'varchar', length: 512, nullable: true })
   url?: string;
 
-  @Column({ type: 'timestamp' })
+  @Column({ name: 'captured_at', type: 'timestamp' })
   capturedAt: Date;
 }

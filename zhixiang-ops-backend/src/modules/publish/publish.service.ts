@@ -16,6 +16,20 @@ import { decryptSecret } from '../../shared/crypto';
 import { randomUUID } from 'crypto';
 
 /**
+ * 平台发布结果。
+ * simulated=true 表示**未真实推送到平台**（凭证缺失/未接入通道时的降级回执），
+ * 业务上仍标记 Published 以保持链路可跑，但数据层面必须可区分，
+ * 避免把模拟数据当真实经营结果（对账/回收/看板口径）。
+ */
+interface PublishResult {
+  status: PublishStatus;
+  extPostId: string;
+  errorMessage?: string;
+  simulated?: boolean;
+  simulatedReason?: string;
+}
+
+/**
  * 发布与分发服务（规划 §4-I）。
  * 消费 F 脚本（scriptId + attributionId 透传），按 B 账号多账号分发；
  * 发布前合规校验复用 F 脚本的 complianceRisk（高危拦截）；
@@ -109,6 +123,7 @@ export class PublishService {
 
   // ---- 私有 ----
 
+  /** createTask 入参（单条发布任务描述） */
   private async createTask(
     tenantId: string,
     item: {
@@ -131,6 +146,21 @@ export class PublishService {
     });
     if (existing) return existing;
 
+    const ctx = await this.validatePublishInput(tenantId, item);
+    const publishResult = await this.tryPlatformPublish(
+      ctx.account,
+      ctx.script.title ?? ctx.script.content?.substring(0, 64) ?? '',
+      ctx.script,
+      item.videoId,
+    );
+    return this.saveTask(tenantId, item, ctx, publishResult);
+  }
+
+  /** 发布前置校验：脚本可发布性 + 账号存在/平台匹配（异常统一在此抛出） */
+  private async validatePublishInput(
+    tenantId: string,
+    item: { scriptId: number; accountId: number; platform?: string },
+  ): Promise<{ script: ScriptEntity; account: AccountEntity }> {
     const script = await this.scriptRepo.findOne({ where: { id: item.scriptId, tenantId } });
     if (!script) throw new AppError('SCRIPT_NOT_FOUND');
 
@@ -147,23 +177,29 @@ export class PublishService {
     if (item.platform && item.platform !== account.platform) {
       throw new AppError('PUBLISH_PLATFORM_MISMATCH');
     }
+    return { script, account };
+  }
 
+  /** 发布任务实体构造与落库（状态/时间/模拟标记的字段映射集中一处） */
+  private async saveTask(
+    tenantId: string,
+    item: {
+      scriptId: number;
+      accountId: number;
+      scheduledAt?: string;
+      cartProductId?: string;
+      videoId?: number;
+    },
+    ctx: { script: ScriptEntity; account: AccountEntity },
+    publishResult: PublishResult,
+  ): Promise<PublishTaskEntity> {
     const scheduledAt = item.scheduledAt ? new Date(item.scheduledAt) : null;
-
-    // 尝试真实平台发布（抖音/快手），传递 videoId 以精确关联视频资产
-    const publishResult = await this.tryPlatformPublish(
-      account,
-      script.title ?? script.content?.substring(0, 64) ?? '',
-      script,
-      item.videoId,
-    );
-
     const task = this.publishRepo.create({
       tenantId,
       scriptId: item.scriptId,
       accountId: item.accountId,
-      platform: account.platform,
-      attributionId: script.attributionId,
+      platform: ctx.account.platform,
+      attributionId: ctx.script.attributionId,
       videoId: item.videoId ?? null,
       scheduledAt,
       status: publishResult.status,
@@ -174,6 +210,9 @@ export class PublishService {
       orderConv: 0,
       publishedAt: publishResult.status === PublishStatus.Published ? new Date() : null,
       errorMsg: publishResult.errorMessage,
+      // 模拟发布标记落库：对账/回收看板据此区分「真实回执」与「降级模拟」
+      simulated: publishResult.simulated ? 1 : 0,
+      simulatedReason: publishResult.simulatedReason ?? null,
     } as Parameters<typeof this.publishRepo.create>[0]);
     return this.publishRepo.save(task);
   }
@@ -188,82 +227,41 @@ export class PublishService {
     title: string,
     _script: ScriptEntity,
     videoId?: number,
-  ): Promise<{
-    status: PublishStatus;
-    extPostId: string;
-    errorMessage?: string;
-  }> {
+  ): Promise<PublishResult> {
     const simulatedExtId = `pub_${account.tenantId ?? 't'}_${account.id}_${_script.id}`;
-
-    // 非抖音账号 → 模拟回执
-    if (account.platform !== 'douyin') {
+    /** 模拟回执构造：统一标记 simulated，避免与真实平台回执混淆（审计/对账可区分） */
+    const simulated = (reason: string): PublishResult => {
+      this.logger.warn(`[publish] 降级为模拟发布（${reason}），未真实推送到平台`);
       return {
         status: PublishStatus.Published,
         extPostId: simulatedExtId,
+        simulated: true,
+        simulatedReason: reason,
       };
+    };
+
+    // 非抖音账号 → 模拟回执
+    if (account.platform !== 'douyin') {
+      return simulated(`平台 ${account.platform} 未接入真实发布通道`);
     }
 
     // 抖音平台：检查是否有 API 凭证
     if (!this.douyinClient.isConfigured()) {
-      this.logger.warn('Douyin client not configured, fallback to simulated publish');
-      return {
-        status: PublishStatus.Published,
-        extPostId: simulatedExtId,
-      };
+      return simulated('抖音开放平台凭证未配置');
     }
 
-    // 检查账号是否有 OAuth 凭证
-    let accessToken: string;
-    try {
-      if (!account.tokenEnc) throw new Error('no token');
-      const decrypted = decryptSecret(account.tokenEnc);
-      accessToken = decrypted;
-    } catch {
-      this.logger.warn(`Account ${account.id}: no valid OAuth token, fallback to simulated`);
-      return {
-        status: PublishStatus.Published,
-        extPostId: simulatedExtId,
-      };
-    }
+    const accessToken = this.resolveAccessToken(account);
+    if (!accessToken) return simulated(`账号 ${account.id} 无有效 OAuth Token`);
 
     const openId = account.platformOpenId;
     if (!openId) {
-      this.logger.warn(`Account ${account.id}: no platformOpenId, fallback to simulated`);
-      return {
-        status: PublishStatus.Published,
-        extPostId: simulatedExtId,
-      };
+      return simulated(`账号 ${account.id} 缺少 platformOpenId`);
     }
 
-    // 视频文件：优先通过 videoId 精确查找，回退到系统目录搜索
-    let videoFilePath: string | null = null;
-    if (videoId) {
-      try {
-        const video = await this.videoRepo.findOne({ where: { id: videoId } });
-        const localPath = video?.meta?.localPath;
-        if (typeof localPath === 'string') {
-          videoFilePath = localPath;
-          this.logger.log(`Found video via videoId=${videoId}: ${localPath}`);
-        }
-      } catch (e) {
-        this.logger.warn(`VideoEntity lookup failed for id=${videoId}: ${(e as Error).message}`);
-      }
-    }
-    // 回退：查找 H 模块生成的最新视频
+    // 视频文件：优先通过 videoId 精确查找，回退到系统目录搜索（均失败则降级模拟）
+    const videoFilePath = await this.resolveVideoFile(videoId);
     if (!videoFilePath) {
-      try {
-        videoFilePath = await this.findLatestVideoFile();
-      } catch (e) {
-        this.logger.warn(`Cannot find video file: ${(e as Error).message}`);
-      }
-    }
-
-    if (!videoFilePath) {
-      this.logger.warn('No video file for douyin publish, fallback to simulated');
-      return {
-        status: PublishStatus.Published,
-        extPostId: simulatedExtId,
-      };
+      return simulated('未找到可发布的视频文件');
     }
 
     // 真实 API 发布
@@ -278,22 +276,70 @@ export class PublishService {
       return {
         status: PublishStatus.Published,
         extPostId: `dy_${result.itemId}`,
+        simulated: false,
       };
     } catch (e) {
-      if (e instanceof DouyinApiError) {
-        this.logger.error(
-          `Douyin API error: ${e.message} (${e.errorCode}/${e.subErrorCode}) logid=${e.logid}`,
-        );
-        return {
-          status: PublishStatus.Failed,
-          extPostId: `dy_err_${randomUUID().substring(0, 8)}`,
-          errorMessage: `Douyin[${e.errorCode}]: ${e.message}`,
-        };
-      }
-      this.logger.error(`Douyin publish unexpected: ${(e as Error).message}`);
-      // 真实发布失败不降级模拟——业务上要求明确知道发布是否成功
-      throw new AppError('PUBLISH_DOUYIN_API_ERROR');
+      return this.mapDouyinPublishError(e);
     }
+  }
+
+  /** 解密账号 OAuth Token；无 token/解密失败返回 null（调用方据此降级） */
+  private resolveAccessToken(account: AccountEntity): string | null {
+    if (!account.tokenEnc) return null;
+    try {
+      return decryptSecret(account.tokenEnc);
+    } catch {
+      this.logger.warn(`Account ${account.id}: OAuth token 解密失败`);
+      return null;
+    }
+  }
+
+  /** 按 videoId 精确查找成片本地路径（未命中/异常返回 null） */
+  private async resolveVideoPath(videoId?: number): Promise<string | null> {
+    if (!videoId) return null;
+    try {
+      const video = await this.videoRepo.findOne({ where: { id: videoId } });
+      const localPath = video?.meta?.localPath;
+      if (typeof localPath === 'string') {
+        this.logger.log(`Found video via videoId=${videoId}: ${localPath}`);
+        return localPath;
+      }
+    } catch (e) {
+      this.logger.warn(`VideoEntity lookup failed for id=${videoId}: ${(e as Error).message}`);
+    }
+    return null;
+  }
+
+  /**
+   * 解析待发布视频：videoId 精确查找优先，未命中回退系统目录搜索最新 mp4。
+   * 查找异常一律降级为 null（由调用方转模拟回执），不阻断发布链路。
+   */
+  private async resolveVideoFile(videoId?: number): Promise<string | null> {
+    const exact = await this.resolveVideoPath(videoId);
+    if (exact) return exact;
+    try {
+      return await this.findLatestVideoFile();
+    } catch (e) {
+      this.logger.warn(`Cannot find video file: ${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 抖音发布异常映射：平台错误 → Failed 回执；其他异常 → 明确抛错（不静默降级） */
+  private mapDouyinPublishError(e: unknown): PublishResult {
+    if (e instanceof DouyinApiError) {
+      this.logger.error(
+        `Douyin API error: ${e.message} (${e.errorCode}/${e.subErrorCode}) logid=${e.logid}`,
+      );
+      return {
+        status: PublishStatus.Failed,
+        extPostId: `dy_err_${randomUUID().substring(0, 8)}`,
+        errorMessage: `Douyin[${e.errorCode}]: ${e.message}`,
+      };
+    }
+    this.logger.error(`Douyin publish unexpected: ${(e as Error).message}`);
+    // 真实发布失败不降级模拟——业务上要求明确知道发布是否成功
+    throw new AppError('PUBLISH_DOUYIN_API_ERROR');
   }
 
   /**

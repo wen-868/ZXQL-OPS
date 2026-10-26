@@ -71,21 +71,42 @@ export class LlmProviderService {
 
   async update(id: number, dto: UpdateLlmProviderDto, tenantId: string): Promise<LlmProviderView> {
     const e = await this.findOne(id, tenantId);
-
-    if (dto.name && dto.name !== e.name) {
-      const dup = await this.repo.findOne({ where: { tenantId, name: dto.name } });
-      if (dup && Number(dup.id) !== id) throw new AppError('LLM_PROVIDER_NAME_DUP');
-      e.name = dto.name;
-    }
-    if (dto.type) e.type = dto.type;
-    if (dto.baseUrl !== undefined) e.baseUrl = dto.baseUrl || null;
-    if (dto.apiKey !== undefined && dto.apiKey !== '') e.apiKeyEnc = encryptSecret(dto.apiKey);
-    if (dto.defaultModel !== undefined) e.defaultModel = dto.defaultModel || null;
-    if (dto.enabled !== undefined) e.enabled = dto.enabled ? 1 : 0;
-    if (dto.remark !== undefined) e.remark = dto.remark || null;
-
+    await this.assertNameChangeAvailable(e, dto, tenantId);
+    this.applyProviderFields(e, dto);
     const saved = await this.repo.save(e);
     return this.toView(saved);
+  }
+
+  /** 改名去重校验：同租户已有同名（排除自身）即拒绝 */
+  private async assertNameChangeAvailable(
+    e: LlmProviderEntity,
+    dto: UpdateLlmProviderDto,
+    tenantId: string,
+  ): Promise<void> {
+    if (!dto.name || dto.name === e.name) return;
+    const dup = await this.repo.findOne({ where: { tenantId, name: dto.name } });
+    if (dup && Number(dup.id) !== Number(e.id)) throw new AppError('LLM_PROVIDER_NAME_DUP');
+    e.name = dto.name;
+  }
+
+  /** 可空文本字段（空串归一为 null） */
+  private static readonly NULLABLE_FIELDS: Array<keyof UpdateLlmProviderDto> = [
+    'baseUrl',
+    'defaultModel',
+    'remark',
+  ];
+
+  /** 局部字段应用：清单驱动，避免逐字段 if 堆叠 */
+  private applyProviderFields(e: LlmProviderEntity, dto: UpdateLlmProviderDto): void {
+    if (dto.type) e.type = dto.type;
+    if (dto.apiKey) e.apiKeyEnc = encryptSecret(dto.apiKey);
+    if (dto.enabled !== undefined) e.enabled = dto.enabled ? 1 : 0;
+    for (const field of LlmProviderService.NULLABLE_FIELDS) {
+      const value = dto[field];
+      if (value !== undefined) {
+        (e as unknown as Record<string, unknown>)[field] = value || null;
+      }
+    }
   }
 
   async remove(id: number, tenantId: string): Promise<{ id: number }> {

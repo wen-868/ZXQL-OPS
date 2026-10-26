@@ -88,72 +88,76 @@ function autoIdSave<T extends { id?: number }>(
   });
 }
 
+/** 默认值 + partial 展开覆盖（替代逐字段 ??，工厂函数圈复杂度降至 1） */
+const ATTR_ID = 'attr_tn-1_content_' + 'a'.repeat(32);
+
 function makePublish(partial: Partial<PublishTaskEntity> = {}): PublishTaskEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? 'tn-1',
-    scriptId: partial.scriptId ?? 1,
-    accountId: partial.accountId ?? 10,
-    platform: partial.platform ?? 'douyin',
-    attributionId: partial.attributionId ?? 'attr_tn-1_content_' + 'a'.repeat(32),
-    extPostId: partial.extPostId ?? 'pub_tn-1_1_10',
-    status: partial.status ?? ('published' as PublishStatus),
+    id: 1,
+    tenantId: 'tn-1',
+    scriptId: 1,
+    accountId: 10,
+    platform: 'douyin',
+    attributionId: ATTR_ID,
+    extPostId: 'pub_tn-1_1_10',
+    status: 'published' as PublishStatus,
+    ...partial,
   } as PublishTaskEntity;
 }
 
 function makeScript(partial: Partial<ScriptEntity> = {}): ScriptEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? 'tn-1',
-    topicId: partial.topicId ?? 1,
-    attributionId: partial.attributionId ?? 'attr_tn-1_content_' + 'a'.repeat(32),
-    title: partial.title ?? '脚本标题',
-    content: partial.content ?? '脚本正文',
-    hook: partial.hook ?? '钩子',
-    hookEmotion: partial.hookEmotion ?? '好奇',
-    version: partial.version ?? 1,
-    status: partial.status ?? ('draft' as ScriptStatus),
-    promptVersion: partial.promptVersion ?? 'v1',
-    modelUsed: partial.modelUsed ?? '',
+    id: 1,
+    tenantId: 'tn-1',
+    topicId: 1,
+    attributionId: ATTR_ID,
+    title: '脚本标题',
+    content: '脚本正文',
+    hook: '钩子',
+    hookEmotion: '好奇',
+    version: 1,
+    status: 'draft' as ScriptStatus,
+    promptVersion: 'v1',
+    modelUsed: '',
+    ...partial,
   } as ScriptEntity;
 }
 
 function makeTopic(partial: Partial<TopicEntity> = {}): TopicEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? 'tn-1',
-    attributionId: partial.attributionId ?? 'attr_tn-1_content_' + 'a'.repeat(32),
-    title: partial.title ?? '选题标题',
-    humanDriver: partial.humanDriver ?? '贪',
-    emotion: partial.emotion ?? '好奇',
-    status: partial.status ?? ('idea' as TopicStatus),
-    score: partial.score ?? 0,
-    promptVersion: partial.promptVersion ?? 'v1',
-    modelUsed: partial.modelUsed ?? '',
+    id: 1,
+    tenantId: 'tn-1',
+    attributionId: ATTR_ID,
+    title: '选题标题',
+    humanDriver: '贪',
+    emotion: '好奇',
+    status: 'idea' as TopicStatus,
+    score: 0,
+    promptVersion: 'v1',
+    modelUsed: '',
+    ...partial,
   } as TopicEntity;
 }
 
 function makeFeedback(partial: Partial<FeedbackEntity> = {}): FeedbackEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? 'tn-1',
-    topicId: partial.topicId ?? 1,
-    videoId: partial.videoId ?? 1,
-    platform: partial.platform ?? 'douyin',
-    attributionId: partial.attributionId ?? 'attr_tn-1_content_' + 'a'.repeat(32),
-    metrics: partial.metrics ?? {
+    id: 1,
+    tenantId: 'tn-1',
+    topicId: 1,
+    videoId: 1,
+    platform: 'douyin',
+    attributionId: ATTR_ID,
+    metrics: {
       play: 10000,
       completeRate: 0.5,
       interact: 200,
       fanInc: 100,
       commission: 5,
     },
-    comments: partial.comments ?? [
-      '这条讲贪的内容太戳我了，好奇到不行',
-      '看完直接下单了，求贪更多选题',
-    ],
-    reAnalysisId: partial.reAnalysisId ?? null,
-    collectedAt: partial.collectedAt ?? new Date(),
+    comments: ['这条讲贪的内容太戳我了，好奇到不行', '看完直接下单了，求贪更多选题'],
+    reAnalysisId: null,
+    collectedAt: new Date(),
+    ...partial,
   } as FeedbackEntity;
 }
 

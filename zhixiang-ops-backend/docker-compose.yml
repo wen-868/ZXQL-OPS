@@ -1,17 +1,54 @@
-# 智享运营系统 · 本地依赖编排（MySQL + Redis）
-# 与 src/config/env.ts / .env.example 严格对齐：
-#   DB_PORT=3306 / DB_USER=root / DB_PASSWORD=your_password / DB_NAME=zhixiang_ops
-#   REDIS_PORT=6379 / REDIS_URL=redis://127.0.0.1:6379（无密码）
+# 智享运营系统 · 完整服务编排
+# 包括: NestJS后端 + MySQL + Redis + Playwright浏览器工作台
 #
-# 用法：
-#   docker compose up -d            # 启动
-#   docker compose ps               # 查看健康
+# 服务说明:
+#   - api: NestJS后端服务 (端口: 3000)
+#   - mysql: 数据库服务 (端口: 3306)
+#   - redis: 缓存服务 (端口: 6379)
+#   - browser: Playwright浏览器工作台 (端口: 3001)
+#
+# 必要配置:
+#   1. 复制 .env.example 为 .env 并填写真实凭据
+#   2. 确保播放器依赖已安装: npx playwright install chromium
+#
+# 用法:
+#   docker compose up -d            # 启动所有服务
+#   docker compose ps               # 查看健康状态
 #   docker compose down             # 停止并保留数据
 #   docker compose down -v         # 停止并清空数据卷
-#
-# 注意：示例凭据仅用于本地开发。生产环境请改用强密码并尽量走外部托管。
 
 services:
+  # NestJS API 服务
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zhixiang-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_TYPE=mysql
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${DB_USER:-root}
+      - MYSQL_PASSWORD=${DB_PASSWORD:-your_password}
+      - MYSQL_DATABASE=${DB_NAME:-zhixiang_ops}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OPS_BROWSER_EXECUTABLE=
+      - OPS_BROWSER_HEADLESS=true
+      - CORS_ORIGIN=http://localhost:3001
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ops-net
+
+  # MySQL 数据库服务
   mysql:
     image: mysql:8.0
     container_name: ops-mysql
@@ -21,8 +58,8 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
     environment:
-      MYSQL_ROOT_PASSWORD: your_password
-      MYSQL_DATABASE: zhixiang_ops
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-your_password}
+      MYSQL_DATABASE: ${DB_NAME:-zhixiang_ops}
       MYSQL_ROOT_HOST: '%'
     ports:
       - "3306:3306"
@@ -37,6 +74,7 @@ services:
     networks:
       - ops-net
 
+  # Redis 缓存服务
   redis:
     image: redis:7-alpine
     container_name: ops-redis
@@ -55,10 +93,28 @@ services:
     networks:
       - ops-net
 
-volumes:
-  ops-mysql-data:
-  ops-redis-data:
+  # Playwright 浏览器工作台前端
+  browser:
+    build:
+      context: ./src/modules/workspace
+      dockerfile: Dockerfile.browser
+    container_name: browser-workbench
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - VITE_WS_URL=http://api:3000
+      - VITE_NODE_ENV=production
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - ops-net
 
 networks:
   ops-net:
     driver: bridge
+
+volumes:
+  ops-mysql-data:
+  ops-redis-data:

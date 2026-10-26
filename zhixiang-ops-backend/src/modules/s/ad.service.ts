@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TenantContext } from '../../tenant/tenant-context';
@@ -173,32 +173,70 @@ export class AdService {
     const tenantId = TenantContext.requireTenantId();
     const campaign = await this.campaignRepo.findOne({ where: { id: dto.campaignId, tenantId } });
     if (!campaign) throw new AppError('AD_CAMPAIGN_NOT_FOUND');
+
     const metric = this.metricRepo.create({
       tenantId,
       campaignId: dto.campaignId,
       date: dto.date ? new Date(dto.date) : new Date(),
-      impressions: dto.impressions ?? 0,
-      clicks: dto.clicks ?? 0,
-      conversions: dto.conversions ?? 0,
-      cost: dto.cost ?? 0,
-      roi: dto.roi ?? 0,
+      impressions: 0,
+      clicks: 0,
+      conversions: 0,
+      cost: 0,
+      roi: 0,
+      ...AdService.numericFields(dto),
     });
     const saved = await this.metricRepo.save(metric);
     // 回写计划累计消耗与 ROI
-    campaign.spend = Number(campaign.spend) + (dto.cost ?? 0);
-    if (campaign.spend > 0 && dto.cost && dto.cost > 0) {
-      campaign.roi = Number(((dto.roi ?? 0) || campaign.roi).toFixed(2));
-    }
+    AdService.rollupCampaign(campaign, dto);
     await this.campaignRepo.save(campaign);
+    return AdService.toMetricView(saved);
+  }
+
+  private static readonly METRIC_NUMBER_FIELDS = [
+    'impressions',
+    'clicks',
+    'conversions',
+    'cost',
+    'roi',
+  ] as const;
+
+  /** dto 中显式提供的数值字段（undefined 不覆盖默认 0；0 为有效值） */
+  private static numericFields(dto: ReportMetricDto): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const key of AdService.METRIC_NUMBER_FIELDS) {
+      const value = dto[key];
+      if (value !== undefined) out[key] = value;
+    }
+    return out;
+  }
+
+  /** 回写计划累计消耗；本次有正向消耗时用新报 ROI 覆盖（未报则保留计划值） */
+  private static rollupCampaign(campaign: AdCampaignEntity, dto: ReportMetricDto): void {
+    campaign.spend = Number(campaign.spend) + (dto.cost ?? 0);
+    if (campaign.spend > 0 && (dto.cost ?? 0) > 0) {
+      campaign.roi = Number((dto.roi || campaign.roi).toFixed(2));
+    }
+  }
+
+  private static toMetricView(e: {
+    id: number;
+    campaignId: number;
+    date: Date;
+    impressions: number;
+    clicks: number;
+    conversions: number;
+    cost: unknown;
+    roi: unknown;
+  }): AdMetricView {
     return {
-      id: saved.id,
-      campaignId: saved.campaignId,
-      date: saved.date.toISOString().slice(0, 10),
-      impressions: saved.impressions,
-      clicks: saved.clicks,
-      conversions: saved.conversions,
-      cost: Number(saved.cost),
-      roi: Number(saved.roi),
+      id: e.id,
+      campaignId: e.campaignId,
+      date: e.date.toISOString().slice(0, 10),
+      impressions: e.impressions,
+      clicks: e.clicks,
+      conversions: e.conversions,
+      cost: Number(e.cost),
+      roi: Number(e.roi),
     };
   }
 }

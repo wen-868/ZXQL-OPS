@@ -17,8 +17,9 @@ import { AppError } from '../shared/app-error';
 export class TenantSubscriber {
   beforeInsert(event: InsertEvent<unknown>): void {
     const entity = event.entity as { tenantId?: string } | undefined;
-    if (entity && typeof entity.tenantId === 'undefined') return; // 非租户实体
-    if (entity && !entity.tenantId) {
+    if (!entity || !('tenantId' in entity)) return; // 非租户实体（无该列）
+    if (!entity.tenantId) {
+      // tenantId 为 undefined / null / 空串 → 从上下文注入（缺上下文时交由 NOT NULL 约束报错）
       const tid = TenantContext.getTenantId();
       if (tid) entity.tenantId = tid;
     }

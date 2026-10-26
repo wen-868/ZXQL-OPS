@@ -30,6 +30,20 @@ export interface PlatformOAuthAdapter {
 /** 抖音 OAuth 凭据加载器（由配置中心注入；未配置时返回空串走 Sandbox） */
 export type DouyinCredentialLoader = () => { appId: string; appSecret: string };
 
+/** 抖音 /oauth/access_token/ 响应体（仅声明本适配器消费的字段） */
+interface DouyinTokenData {
+  access_token?: string;
+  refresh_token?: string;
+  open_id?: string;
+  expires_in?: number;
+  refresh_expires_in?: number;
+}
+
+interface DouyinTokenResponse {
+  data?: DouyinTokenData;
+  message?: string;
+}
+
 /** 抖音开放平台适配器（client_key/client_secret + code 换 token） */
 export class DouyinOAuthAdapter implements PlatformOAuthAdapter {
   readonly platform: Platform = 'douyin';
@@ -64,6 +78,21 @@ export class DouyinOAuthAdapter implements PlatformOAuthAdapter {
       // Stub：未配置凭证时的演示链路（token 为确定性 mock，便于联调）
       return this.stubExchange(code);
     }
+    const json = await this.requestAccessToken(code, redirectUri);
+    if (!json.data) {
+      throw new AppError(
+        'EXTERNAL_SERVICE_ERROR',
+        `抖音 OAuth 换 Token 失败: ${json.message ?? '未知错误'}`,
+      );
+    }
+    return DouyinOAuthAdapter.toTokenResult(json.data, json.message);
+  }
+
+  /** 调用抖音 openapi 换取 Token（HTTP 细节与超时集中在此） */
+  private async requestAccessToken(
+    code: string,
+    redirectUri?: string,
+  ): Promise<DouyinTokenResponse> {
     const params = new URLSearchParams({
       client_key: this.appId,
       client_secret: this.appSecret,
@@ -78,39 +107,24 @@ export class DouyinOAuthAdapter implements PlatformOAuthAdapter {
       body: params.toString(),
       signal: AbortSignal.timeout(30_000),
     });
-    const json = (await resp.json()) as {
-      data?: {
-        access_token?: string;
-        refresh_token?: string;
-        open_id?: string;
-        expires_in?: number;
-        refresh_expires_in?: number;
-      };
-      message?: string;
-    };
-    if (!json.data) {
-      throw new AppError(
-        'EXTERNAL_SERVICE_ERROR',
-        `抖音 OAuth 换 Token 失败: ${json.message ?? '未知错误'}`,
-      );
-    }
-    const {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      open_id: openId,
-      expires_in: expiresIn,
-    } = json.data;
+    return (await resp.json()) as DouyinTokenResponse;
+  }
+
+  /** 响应 → TokenResult；缺 access_token/open_id 视为失败 */
+  private static toTokenResult(data: DouyinTokenData, message?: string): OAuthTokenResult {
+    const accessToken = data.access_token;
+    const openId = data.open_id;
     if (!accessToken || !openId) {
       throw new AppError(
         'EXTERNAL_SERVICE_ERROR',
-        `抖音 OAuth 换 Token 失败: ${json.message ?? '未知错误'}`,
+        `抖音 OAuth 换 Token 失败: ${message ?? '未知错误'}`,
       );
     }
     return {
       accessToken,
-      refreshToken: refreshToken ?? '',
+      refreshToken: data.refresh_token ?? '',
       openId,
-      expiresAt: new Date(Date.now() + (expiresIn ?? 86400) * 1000),
+      expiresAt: new Date(Date.now() + (data.expires_in ?? 86400) * 1000),
     };
   }
 

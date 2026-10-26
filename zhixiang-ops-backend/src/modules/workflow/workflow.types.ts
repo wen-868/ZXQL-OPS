@@ -50,8 +50,11 @@ export interface WorkflowEdge {
   condition?: Record<string, any>;
 }
 
-/** 拓扑排序（Kahn）。无环返回节点 id 顺序；有环返回 null */
-export function topoSort(nodes: WorkflowNode[], edges: WorkflowEdge[]): string[] | null {
+/** 建图：入度表 + 邻接表（忽略引用不存在节点的脏边） */
+function buildGraph(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+): { indeg: Map<string, number>; adj: Map<string, string[]> } {
   const indeg = new Map<string, number>();
   const adj = new Map<string, string[]>();
   for (const n of nodes) {
@@ -63,6 +66,11 @@ export function topoSort(nodes: WorkflowNode[], edges: WorkflowEdge[]): string[]
     adj.get(e.from)!.push(e.to);
     indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
   }
+  return { indeg, adj };
+}
+
+/** Kahn 主循环：从入度 0 出发逐层出队，返回访问顺序 */
+function kahnOrder(indeg: Map<string, number>, adj: Map<string, string[]>): string[] {
   const queue: string[] = [];
   for (const [id, d] of indeg) if (d === 0) queue.push(id);
   const order: string[] = [];
@@ -70,10 +78,18 @@ export function topoSort(nodes: WorkflowNode[], edges: WorkflowEdge[]): string[]
     const cur = queue.shift()!;
     order.push(cur);
     for (const nxt of adj.get(cur) ?? []) {
-      indeg.set(nxt, (indeg.get(nxt) ?? 0) - 1);
-      if (indeg.get(nxt) === 0) queue.push(nxt);
+      const rest = (indeg.get(nxt) ?? 0) - 1;
+      indeg.set(nxt, rest);
+      if (rest === 0) queue.push(nxt);
     }
   }
+  return order;
+}
+
+/** 拓扑排序（Kahn）。无环返回节点 id 顺序；有环返回 null */
+export function topoSort(nodes: WorkflowNode[], edges: WorkflowEdge[]): string[] | null {
+  const { indeg, adj } = buildGraph(nodes, edges);
+  const order = kahnOrder(indeg, adj);
   return order.length === nodes.length ? order : null;
 }
 

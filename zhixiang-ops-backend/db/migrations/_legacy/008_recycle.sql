@@ -53,13 +53,13 @@ CREATE TABLE IF NOT EXISTS ops_driver_efficiency (
   avg_complete_rate DECIMAL(5,4) NOT NULL DEFAULT 0,
   avg_interact_rate DECIMAL(5,4) NOT NULL DEFAULT 0,
   avg_conversion  DECIMAL(8,4) NOT NULL DEFAULT 0,
-  window          VARCHAR(16)  NOT NULL DEFAULT 'day',
+  `window`        VARCHAR(16)  NOT NULL DEFAULT 'day',
   stat_date       DATE         NOT NULL,
   id_legacy       INT          NULL COMMENT '预留',
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   deleted_at      DATETIME(3)  NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_driver_eff (tenant_id, driver, emotion, window, stat_date),
+  UNIQUE KEY uq_driver_eff (tenant_id, driver, emotion, `window`, stat_date),
   KEY idx_driver_eff_tenant (tenant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人性效能';

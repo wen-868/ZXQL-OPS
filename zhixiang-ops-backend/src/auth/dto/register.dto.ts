@@ -1,4 +1,6 @@
-import { IsString, MinLength, MaxLength, IsOptional } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+
+const ALLOWED_ROLES = ['viewer', 'editor', 'admin'] as const;
 
 export class RegisterDto {
   @IsString()
@@ -16,7 +18,8 @@ export class RegisterDto {
   @MaxLength(64)
   realName?: string;
 
+  /** 仅允许内置角色；未传默认 viewer（最低权限），避免开放注册即管理员 */
   @IsOptional()
-  @IsString()
-  role?: string;
+  @IsIn(ALLOWED_ROLES)
+  role?: (typeof ALLOWED_ROLES)[number];
 }

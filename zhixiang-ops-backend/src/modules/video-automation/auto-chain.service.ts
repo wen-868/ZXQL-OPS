@@ -102,33 +102,22 @@ export class VideoAutoChainService implements OnModuleInit {
     }
   }
 
+  /** 各阶段产物写入 ctx 的槽位（阶段 → ctx 字段名，与 VideoStageResult 字段一一对应） */
+  private readonly stageField: Record<VideoStage, keyof VideoStageResult> = {
+    intel: 'collectTaskIds',
+    analyze: 'analysisTaskIds',
+    topic: 'topicIds',
+    script: 'scriptIds',
+    material: 'materialIds',
+    compose: 'videoIds',
+    publish: 'publishTaskIds',
+    recycle: 'recycleTaskIds',
+  };
+
   private absorb(stage: VideoStage, ctx: VideoChainContext, detail: VideoStageResult): void {
-    switch (stage) {
-      case 'intel':
-        ctx.collectTaskIds = detail?.collectTaskIds ?? ctx.collectTaskIds;
-        break;
-      case 'analyze':
-        ctx.analysisTaskIds = detail?.analysisTaskIds ?? ctx.analysisTaskIds;
-        break;
-      case 'topic':
-        ctx.topicIds = detail?.topicIds ?? ctx.topicIds;
-        break;
-      case 'script':
-        ctx.scriptIds = detail?.scriptIds ?? ctx.scriptIds;
-        break;
-      case 'material':
-        ctx.materialIds = detail?.materialIds ?? ctx.materialIds;
-        break;
-      case 'compose':
-        ctx.videoIds = detail?.videoIds ?? ctx.videoIds;
-        break;
-      case 'publish':
-        ctx.publishTaskIds = detail?.publishTaskIds ?? ctx.publishTaskIds;
-        break;
-      case 'recycle':
-        ctx.recycleTaskIds = detail?.recycleTaskIds ?? ctx.recycleTaskIds;
-        break;
-    }
+    const field = this.stageField[stage];
+    const c = ctx as unknown as Record<string, unknown>;
+    c[field] = detail?.[field] ?? c[field];
   }
 
   listRuns(): Array<{ id: string; tenantId: string; at: Date; stage: string }> {

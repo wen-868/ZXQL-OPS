@@ -96,24 +96,44 @@ export class IntegrationService {
       scopes?: Partial<Record<'products' | 'customers' | 'inventory' | 'orders', boolean>>;
     },
   ): Promise<SyncConfigView> {
-    const conditions = await this.checkSyncConditions(tenantId);
-    if (dto.syncEnabled) {
-      if (!conditions.connected) throw new AppError('SYNC_REQUIRES_CONNECTED');
-      if (!conditions.serviceAccount) throw new AppError('SYNC_REQUIRES_SERVICE_ACCOUNT');
-      if (!conditions.tenantBind) throw new AppError('SYNC_REQUIRES_TENANT_BIND');
-    }
+    if (dto.syncEnabled) await this.assertSyncAllowed(tenantId);
 
     const cfg = await this.getOrCreateCfg(tenantId);
     cfg.syncEnabled = dto.syncEnabled ? 1 : 0;
-    if (dto.scopes) {
-      const scopes = dto.scopes;
-      if (scopes.products !== undefined) cfg.syncProducts = scopes.products ? 1 : 0;
-      if (scopes.customers !== undefined) cfg.syncCustomers = scopes.customers ? 1 : 0;
-      if (scopes.inventory !== undefined) cfg.syncInventory = scopes.inventory ? 1 : 0;
-      if (scopes.orders !== undefined) cfg.syncOrders = scopes.orders ? 1 : 0;
-    }
+    IntegrationService.applyScopes(cfg, dto.scopes);
     await this.cfgRepo!.save(cfg);
     return this.getSyncConfig(tenantId);
+  }
+
+  /** 启用同步的前置校验：connected 模式 + 服务账号凭证 + 租户映射（缺失逐项报明确错误） */
+  private async assertSyncAllowed(tenantId: string): Promise<void> {
+    const conditions = await this.checkSyncConditions(tenantId);
+    if (!conditions.connected) throw new AppError('SYNC_REQUIRES_CONNECTED');
+    if (!conditions.serviceAccount) throw new AppError('SYNC_REQUIRES_SERVICE_ACCOUNT');
+    if (!conditions.tenantBind) throw new AppError('SYNC_REQUIRES_TENANT_BIND');
+  }
+
+  /** 同步范围 scope 键 → 配置列映射（数据驱动，避免逐字段 if 堆叠） */
+  private static readonly SCOPE_FIELD_MAP: Array<
+    ['products' | 'customers' | 'inventory' | 'orders', keyof IntegrationCfg]
+  > = [
+    ['products', 'syncProducts'],
+    ['customers', 'syncCustomers'],
+    ['inventory', 'syncInventory'],
+    ['orders', 'syncOrders'],
+  ];
+
+  /** 应用 scope 变更：仅覆盖 dto 中显式出现的项 */
+  private static applyScopes(
+    cfg: IntegrationCfg,
+    scopes?: Partial<Record<'products' | 'customers' | 'inventory' | 'orders', boolean>>,
+  ): void {
+    if (!scopes) return;
+    for (const [scopeKey, cfgField] of IntegrationService.SCOPE_FIELD_MAP) {
+      const value = scopes[scopeKey];
+      if (value === undefined) continue;
+      (cfg as unknown as Record<string, number>)[cfgField as string] = value ? 1 : 0;
+    }
   }
 
   /** 读取或创建当前租户的接入配置（每租户一条） */

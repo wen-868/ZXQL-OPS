@@ -299,8 +299,11 @@ export class FileStorageService {
     }
 
     // ── 本地磁盘路径 ──
+    // relativePath 由服务端签发的 tenantId + ISO 月份 + md5 哈希 + 受限扩展名拼接，无用户可控路径段
     const fullPath = path.join(this.uploadDir, relativePath);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     await fs.writeFile(fullPath, file.buffer);
 
     const url = `${this.publicBase}/uploads/${relativePath}`;
@@ -320,8 +323,17 @@ export class FileStorageService {
       return;
     }
 
-    const fullPath = path.join(this.uploadDir, filePath);
+    // 路径包含性校验：拒绝解析后跳出 uploadDir 的删除（防路径穿越）
+    const root = path.resolve(this.uploadDir);
+    const fullPath = path.resolve(this.uploadDir, filePath);
+    const rel = path.relative(root, fullPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      this.logger.warn(`拒绝越界删除: ${filePath}`);
+      return;
+    }
     try {
+      // fullPath 已在上方做 uploadDir 包含性校验
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       await fs.unlink(fullPath);
       this.logger.log(`本地删除: ${fullPath}`);
     } catch {

@@ -69,17 +69,25 @@ export class TalentCommerceService {
     return e;
   }
 
+  /** 可直赋标量字段（清单驱动，语义：undefined 跳过，其余一律覆盖） */
+  private static readonly TALENT_UPDATE_FIELDS: Array<keyof UpdateTalentDto> = [
+    'name',
+    'type',
+    'contact',
+    'talentAccountId',
+    'digitalHumanId',
+    'agencyShareRate',
+    'talentShareRate',
+    'status',
+    'meta',
+  ];
+
   async updateTalent(id: number, dto: UpdateTalentDto): Promise<TalentEntity> {
     const e = await this.getTalent(id);
-    if (dto.name !== undefined) e.name = dto.name;
-    if (dto.type !== undefined) e.type = dto.type;
-    if (dto.contact !== undefined) e.contact = dto.contact;
-    if (dto.talentAccountId !== undefined) e.talentAccountId = dto.talentAccountId;
-    if (dto.digitalHumanId !== undefined) e.digitalHumanId = dto.digitalHumanId;
-    if (dto.agencyShareRate !== undefined) e.agencyShareRate = dto.agencyShareRate;
-    if (dto.talentShareRate !== undefined) e.talentShareRate = dto.talentShareRate;
-    if (dto.status !== undefined) e.status = dto.status;
-    if (dto.meta !== undefined) e.meta = dto.meta;
+    const target = e as unknown as Record<string, unknown>;
+    for (const field of TalentCommerceService.TALENT_UPDATE_FIELDS) {
+      if (dto[field] !== undefined) target[field] = dto[field];
+    }
     const saved = await this.talentRepo.save(e);
     await this.audit.record({ action: 'update', module: 'talent', resource: `talent:${saved.id}` });
     return saved;

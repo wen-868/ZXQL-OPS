@@ -18,6 +18,7 @@ export const ERROR_CODES: Record<string, ErrorCodeDef> = {
   METHOD_NOT_ALLOWED: { message: '请求方法不被允许', httpStatus: 405 },
   CONFLICT: { message: '资源状态冲突，操作无法完成', httpStatus: 409 },
   TOO_MANY_REQUESTS: { message: '请求过于频繁，请稍后再试', httpStatus: 429 },
+  CSRF_INVALID: { message: 'CSRF 校验失败，请刷新页面后重试', httpStatus: 403 },
   INTERNAL_ERROR: { message: '服务器内部错误', httpStatus: 500 },
   SERVICE_UNAVAILABLE: { message: '服务暂不可用，请稍后再试', httpStatus: 503 },
   EXTERNAL_SERVICE_ERROR: { message: '外部服务调用失败', httpStatus: 502 },
@@ -26,6 +27,7 @@ export const ERROR_CODES: Record<string, ErrorCodeDef> = {
   AUTH_USER_NOT_FOUND: { message: '用户名不存在', httpStatus: 401 },
   AUTH_INVALID_PASSWORD: { message: '密码错误', httpStatus: 401 },
   AUTH_USER_EXISTS: { message: '用户名已存在', httpStatus: 409 },
+  REGISTER_DISABLED: { message: '开放注册已关闭，请联系管理员开通账号', httpStatus: 403 },
   AUTH_USER_DISABLED: { message: '账号已被禁用', httpStatus: 403 },
 
   // 认证（管理系统 SSO 对接）
@@ -78,8 +80,14 @@ export const ERROR_CODES: Record<string, ErrorCodeDef> = {
   // 情报采集（C）
   COMPETITOR_NOT_FOUND: { message: '竞品不存在', httpStatus: 404 },
   COLLECT_TASK_NOT_FOUND: { message: '采集任务不存在', httpStatus: 404 },
+  COLLECT_TASK_STATE_INVALID: { message: '当前任务状态不支持该操作', httpStatus: 409 },
+  COLLECT_SOURCE_NOT_FOUND: { message: '采集源不存在', httpStatus: 404 },
+  COLLECT_SOURCE_DISABLED: { message: '采集源已停用，请先启用', httpStatus: 409 },
+  COMMENT_NOT_FOUND: { message: '评论不存在', httpStatus: 404 },
+  COMMENT_REVIEW_INVALID: { message: '评论审核状态不合法', httpStatus: 400 },
   COLLECT_RATE_LIMITED: { message: '采集频率超限，请稍后重试', httpStatus: 429 },
   COLLECT_SOURCE_LEVEL_INVALID: { message: '采集来源级别不合法（应为 L1/L2）', httpStatus: 400 },
+  COLLECT_TARGET_BLOCKED: { message: '采集目标地址不被允许（禁止内网/保留地址）', httpStatus: 400 },
 
   // 人性分析与洞察引擎（D）
   ANALYSIS_TASK_NOT_FOUND: { message: '分析任务不存在', httpStatus: 404 },

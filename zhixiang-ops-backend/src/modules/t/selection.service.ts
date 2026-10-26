@@ -35,48 +35,9 @@ export class SelectionService {
   /** 导入选品：products 本地录入（优先）；ids 需 connected 模式经适配层拉取 */
   async importSelection(dto: ImportSelectionDto): Promise<SelectionProductView[]> {
     const tenantId = TenantContext.requireTenantId();
-    let items = dto.products;
+    const items = await this.resolveImportItems(dto);
 
-    if (!items || items.length === 0) {
-      if (dto.ids && dto.ids.length > 0) {
-        if (this.integration.isStandalone()) {
-          throw new AppError(
-            'SELECTION_IMPORT_MODE_UNSUPPORTED',
-            '当前为独立模式，无法经平台 API 批量拉取；请直接传入 products 列表',
-          );
-        }
-        const dtos = await this.integration.adapters.product.getProductsByIds(dto.ids);
-        items = dtos.map((p) => ({
-          externalProductId: p.id,
-          title: p.title,
-          price: p.price,
-          platform: dto.platform,
-        }));
-      } else {
-        throw new AppError('SELECTION_IMPORT_EMPTY', 'import 需提供 products 或 ids');
-      }
-    }
-
-    const entities = items.map((it) => {
-      if (it.humanDriver && !isHumanity(it.humanDriver)) {
-        throw new AppError('SELECTION_INVALID_HUMAN_DRIVER', `非法人性标签: ${it.humanDriver}`);
-      }
-      return this.productRepo.create({
-        tenantId,
-        source: dto.source,
-        platform: it.platform ?? dto.platform ?? null,
-        externalProductId: it.externalProductId ?? null,
-        title: it.title,
-        commissionRate: it.commissionRate ?? 0,
-        reputationScore: it.reputationScore ?? null,
-        sales30d: it.sales30d ?? 0,
-        price: it.price ?? null,
-        category: it.category ?? null,
-        humanDriver: it.humanDriver ?? null,
-        metrics: it.metrics ?? null,
-        collectedAt: new Date(),
-      });
-    });
+    const entities = items.map((it) => this.buildProductRow(tenantId, dto, it));
 
     const saved = await this.productRepo.save(entities);
     await this.audit.record({
@@ -87,6 +48,85 @@ export class SelectionService {
     return saved.map((e) => this.toProductView(e));
   }
 
+  /** 解析导入条目：products 优先；缺省时经适配层按 ids 拉取（standalone 拒绝） */
+  private async resolveImportItems(
+    dto: ImportSelectionDto,
+  ): Promise<NonNullable<ImportSelectionDto['products']>> {
+    if (dto.products && dto.products.length > 0) return dto.products;
+    if (!dto.ids || dto.ids.length === 0) {
+      throw new AppError('SELECTION_IMPORT_EMPTY', 'import 需提供 products 或 ids');
+    }
+    if (this.integration.isStandalone()) {
+      throw new AppError(
+        'SELECTION_IMPORT_MODE_UNSUPPORTED',
+        '当前为独立模式，无法经平台 API 批量拉取；请直接传入 products 列表',
+      );
+    }
+    const dtos = await this.integration.adapters.product.getProductsByIds(dto.ids);
+    return dtos.map((p) => ({
+      externalProductId: p.id,
+      title: p.title,
+      price: p.price,
+      platform: dto.platform,
+    }));
+  }
+
+  /** 十进制列（TypeORM 返回 string）→ number；null/undefined 透传 null */
+  private static numOrNull(v: unknown): number | null {
+    return v == null ? null : Number(v);
+  }
+
+  /** 可空字段归一：undefined → null（视图映射统一走此函数，避免 ?? 散落计数） */
+  private static orNull<T>(v: T | null | undefined): T | null {
+    return v ?? null;
+  }
+
+  /** 过滤 null/undefined（展开覆盖时只保留"显式提供"的字段） */
+  private static compact<T extends object>(obj: T): Partial<T> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined && v !== null) out[k] = v;
+    }
+    return out as Partial<T>;
+  }
+
+  /** 选品实体构造（校验人性标签；默认值 + 显式覆盖，等价原 ?? 链） */
+  private buildProductRow(
+    tenantId: string,
+    dto: ImportSelectionDto,
+    it: NonNullable<ImportSelectionDto['products']>[number],
+  ): SelectionProductEntity {
+    if (it.humanDriver && !isHumanity(it.humanDriver)) {
+      throw new AppError('SELECTION_INVALID_HUMAN_DRIVER', `非法人性标签: ${it.humanDriver}`);
+    }
+    return this.productRepo.create({
+      tenantId,
+      source: dto.source,
+      platform: dto.platform ?? null,
+      externalProductId: null,
+      title: it.title,
+      commissionRate: 0,
+      reputationScore: null,
+      sales30d: 0,
+      price: null,
+      category: null,
+      humanDriver: null,
+      metrics: null,
+      collectedAt: new Date(),
+      ...SelectionService.compact({
+        platform: it.platform,
+        externalProductId: it.externalProductId,
+        commissionRate: it.commissionRate,
+        reputationScore: it.reputationScore,
+        sales30d: it.sales30d,
+        price: it.price,
+        category: it.category,
+        humanDriver: it.humanDriver,
+        metrics: it.metrics,
+      }),
+    });
+  }
+
   /** 选品库筛选（佣金%/口碑分/销量/类目/人性/关键词），按销量降序分页 */
   async querySelection(filter: SelectionFilterDto): Promise<PaginatedResult<SelectionProductView>> {
     const tenantId = TenantContext.requireTenantId();
@@ -94,23 +134,19 @@ export class SelectionService {
       .createQueryBuilder('p')
       .where('p.tenantId = :tenantId', { tenantId });
 
-    if (filter.commissionRateMin != null) {
-      qb.andWhere('p.commissionRate >= :c', { c: filter.commissionRateMin });
-    }
-    if (filter.reputationMin != null) {
-      qb.andWhere('p.reputationScore >= :r', { r: filter.reputationMin });
-    }
-    if (filter.salesMin != null) {
-      qb.andWhere('p.sales30d >= :s', { s: filter.salesMin });
-    }
-    if (filter.category) {
-      qb.andWhere('p.category = :cat', { cat: filter.category });
-    }
-    if (filter.humanDriver) {
-      qb.andWhere('p.humanDriver = :hd', { hd: filter.humanDriver });
-    }
-    if (filter.keyword) {
-      qb.andWhere('p.title LIKE :kw', { kw: `%${filter.keyword}%` });
+    // 条件表：字段 → (列名, SQL 片段)；空值一律跳过
+    const conditions: Array<[string | number | null | undefined, string, string]> = [
+      [filter.commissionRateMin, 'p.commissionRate >= :c', 'c'],
+      [filter.reputationMin, 'p.reputationScore >= :r', 'r'],
+      [filter.salesMin, 'p.sales30d >= :s', 's'],
+      [filter.category, 'p.category = :cat', 'cat'],
+      [filter.humanDriver, 'p.humanDriver = :hd', 'hd'],
+      [filter.keyword, 'p.title LIKE :kw', 'kw'],
+    ];
+    for (const [value, clause, param] of conditions) {
+      if (value === null || value === undefined || value === '') continue;
+      const bind = param === 'kw' ? `%${String(value)}%` : value;
+      qb.andWhere(clause, { [param]: bind });
     }
     qb.orderBy('p.sales30d', 'DESC');
 
@@ -234,17 +270,17 @@ export class SelectionService {
     return {
       id: e.id,
       source: e.source,
-      platform: e.platform ?? null,
-      externalProductId: e.externalProductId ?? null,
+      platform: SelectionService.orNull(e.platform),
+      externalProductId: SelectionService.orNull(e.externalProductId),
       title: e.title,
       commissionRate: Number(e.commissionRate),
-      reputationScore: e.reputationScore != null ? Number(e.reputationScore) : null,
+      reputationScore: SelectionService.numOrNull(e.reputationScore),
       sales30d: Number(e.sales30d),
-      price: e.price != null ? Number(e.price) : null,
-      category: e.category ?? null,
-      humanDriver: e.humanDriver ?? null,
-      metrics: (e.metrics as Record<string, unknown>) ?? null,
-      collectedAt: e.collectedAt ?? null,
+      price: SelectionService.numOrNull(e.price),
+      category: SelectionService.orNull(e.category),
+      humanDriver: SelectionService.orNull(e.humanDriver),
+      metrics: SelectionService.orNull(e.metrics),
+      collectedAt: SelectionService.orNull(e.collectedAt),
       createdAt: e.createdAt,
       updatedAt: e.updatedAt,
     };

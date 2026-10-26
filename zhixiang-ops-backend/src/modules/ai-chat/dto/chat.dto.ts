@@ -12,4 +12,9 @@ export class ChatDto {
   @IsArray()
   @IsOptional()
   history?: { role: 'user' | 'assistant'; content: string }[];
+
+  /** 可选模型名（后端白名单校验，非白名单回落默认） */
+  @IsString()
+  @IsOptional()
+  model?: string;
 }

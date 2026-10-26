@@ -233,7 +233,7 @@ describe('AnalyzeService', () => {
 
   // —— 验收点 6：processPendingAnalysis 失败路径 ——
   describe('processPendingAnalysis 失败路径', () => {
-    it('skill.invoke 抛错 → task 状态变 failed，errorMsg 被记录', async () => {
+    it('skill.invoke 抛错 → 降级本地规则聚类，task 仍 done，modelUsed 标记规则兜底', async () => {
       mockSkill.invoke.mockRejectedValueOnce(new Error('boom'));
       const pendingTask = {
         id: 102,
@@ -252,8 +252,8 @@ describe('AnalyzeService', () => {
         (c: any[]) => c[0],
       ) as AnalysisTaskEntity[];
       const finalTask = taskSaves[taskSaves.length - 1];
-      expect(finalTask.status).toBe(AnalysisStatus.Failed);
-      expect(finalTask.errorMsg).toBe('boom');
+      expect(finalTask.status).toBe(AnalysisStatus.Done);
+      expect(finalTask.modelUsed).toBe('rule-fallback');
     });
   });
 
@@ -292,6 +292,36 @@ describe('AnalyzeService', () => {
         expect(ins).toHaveProperty('content');
         expect(ins).not.toHaveProperty('comments');
       }
+    });
+  });
+
+  // —— 验收点 7b：规则兜底单侧命中也能产洞察 ——
+  describe('规则兜底 单侧命中', () => {
+    it('评论只命中人性（无情绪词）→ 洞察用 top 情绪兜底生成，不丢方向', async () => {
+      mockSkill.invoke.mockRejectedValueOnce(new Error('no gateway'));
+      const pendingTask = {
+        id: 104,
+        tenantId: 'tn-1',
+        platform: 'douyin',
+        status: AnalysisStatus.Pending,
+      } as AnalysisTaskEntity;
+      mockTaskRepo.find.mockResolvedValueOnce([pendingTask]);
+      qb.getMany.mockResolvedValueOnce([
+        { id: 1, content: '揭秘内幕真相', tenantId: 'tn-1', isClean: true },
+      ] as CollectedCommentEntity[]);
+
+      await svc.processPendingAnalysis();
+
+      const taskSaves = mockTaskRepo.save.mock.calls.map(
+        (c: any[]) => c[0],
+      ) as AnalysisTaskEntity[];
+      const finalTask = taskSaves[taskSaves.length - 1];
+      expect(finalTask.status).toBe(AnalysisStatus.Done);
+      expect(finalTask.modelUsed).toBe('rule-fallback');
+      expect(Array.isArray(finalTask.insights)).toBe(true);
+      expect(finalTask.insights!.length).toBeGreaterThan(0);
+      expect(finalTask.insights![0].driver).toBeTruthy();
+      expect(finalTask.insights![0].emotion).toBeTruthy();
     });
   });
 

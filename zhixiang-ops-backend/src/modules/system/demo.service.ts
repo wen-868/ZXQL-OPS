@@ -15,10 +15,11 @@ import { env } from '../../config/env';
 
 /**
  * 演示模式服务（规划「演示帐号 + 演示数据」）。
- * - 演示帐号：复用 admin 帐号（免密登录），不再单独建号（username 全局唯一，避免冲突）。
- * - 演示数据：幂等种子（账号/选题/脚本/发布）到 admin 所属租户，让产品开箱即「看起来有内容」。
+ * - 演示帐号：固定在演示租户（t_demo，env.demoTenant）内复用/创建 admin 帐号（免密登录）。
+ *   绝不复用真实租户的 admin —— 演示登录签发的 token 永远属于演示租户，与正式业务物理隔离。
+ * - 演示数据：幂等种子（账号/选题/脚本/发布）到演示租户，让产品开箱即「看起来有内容」。
  * - 清除：系统初始化（/ops/system/init）时删除演示租户的全部演示业务数据（不删 admin 帐号），
- *   保证正式环境干净。演示数据与正式业务数据同租户隔离仅靠演示种子标记，初始化即清空。
+ *   保证正式环境干净。
  */
 @Injectable()
 export class DemoService implements OnModuleInit {
@@ -48,40 +49,46 @@ export class DemoService implements OnModuleInit {
     return `attr_${tenant}_content_${randomBytes(16).toString('hex')}`;
   }
 
+  /** 演示租户固定为 env.demoTenant（t_demo），与任何真实租户解耦 */
+  private demoTenant(): string {
+    return env.demoTenant;
+  }
+
   /**
-   * 解析演示租户：复用 admin 帐号（username 全局唯一）。
-   * - 找到 admin → 返回其所属租户；
-   * - 未找到且 createIfMissing → 创建 admin（随机密码，免密登录不参与校验）并返回其租户；
-   * - 未找到且不创建 → 返回默认演示租户（env.demoTenant）。
+   * 确保演示管理员存在（仅限演示租户）。
+   * 用户名/密码来自 OPS_DEMO_USERNAME / OPS_DEMO_PASSWORD，便于密码登录；
+   * 已存在则重置为当前配置密码（避免历史随机密码无法登录）。
    */
-  private async resolveDemoTenant(createIfMissing: boolean): Promise<string> {
-    const admin = await this.userRepo.findOne({ where: { username: 'admin' } });
-    if (admin) return admin.tenantId;
-    if (!createIfMissing) return env.demoTenant;
-    const created = this.userRepo.create({
-      username: 'admin',
-      password: await hash(randomBytes(16).toString('hex'), 10),
-      realName: '演示管理员',
-      role: 'admin',
-      tenantId: env.demoTenant,
-      type: 'standalone',
-      status: 1,
-    });
-    await this.userRepo.save(created);
-    return created.tenantId;
-  }
-
-  /** 确保演示管理员存在（演示登录兜底；复用 admin 帐号） */
   async ensureDemoUser(): Promise<User> {
-    await this.resolveDemoTenant(true); // 确保 admin 帐号存在
-    const user = await this.userRepo.findOne({ where: { username: 'admin' } });
-    if (!user) throw new Error('[demo] admin 帐号缺失，演示登录失败');
-    return user;
+    const tenantId = this.demoTenant();
+    const username = env.demoUsername;
+    const password = await hash(env.demoPassword, 10);
+    let user = await this.userRepo.findOne({
+      where: { username },
+      select: ['id', 'username', 'password', 'realName', 'role', 'tenantId', 'type', 'status'],
+    });
+    if (!user) {
+      user = this.userRepo.create({
+        username,
+        password,
+        realName: '演示管理员',
+        role: 'admin',
+        tenantId,
+        type: 'standalone',
+        status: 1,
+      });
+    } else {
+      user.password = password;
+      user.status = 1;
+      if (!user.tenantId) user.tenantId = tenantId;
+    }
+    return this.userRepo.save(user);
   }
 
-  /** 幂等种子：演示标记账号（demo_douyin_001）已存在则跳过，避免被既有数据阻塞或重复注入 */
+  /** 幂等种子：先确保演示帐号，再按演示标记账号（demo_douyin_001）决定是否注入业务数据 */
   async seedDemo(): Promise<void> {
-    const tenant = await this.resolveDemoTenant(true);
+    await this.ensureDemoUser();
+    const tenant = this.demoTenant();
     const existing = await this.accountRepo.findOne({
       where: { tenantId: tenant, platformAccountId: 'demo_douyin_001' },
     });
@@ -421,7 +428,7 @@ export class DemoService implements OnModuleInit {
    * 返回被删除的演示业务行总数。
    */
   async clearDemoData(): Promise<number> {
-    const tenant = await this.resolveDemoTenant(false);
+    const tenant = this.demoTenant();
     const p = await this.publishRepo.delete({ tenantId: tenant });
     const s = await this.scriptRepo.delete({ tenantId: tenant });
     const tp = await this.topicRepo.delete({ tenantId: tenant });
@@ -433,7 +440,7 @@ export class DemoService implements OnModuleInit {
 
   /** 是否已存在演示数据（供状态接口提示） */
   async hasDemoData(): Promise<boolean> {
-    const tenant = await this.resolveDemoTenant(false);
+    const tenant = this.demoTenant();
     const a = await this.accountRepo.findOne({ where: { tenantId: tenant } });
     return !!a;
   }

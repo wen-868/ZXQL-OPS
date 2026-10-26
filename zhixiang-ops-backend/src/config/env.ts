@@ -14,6 +14,21 @@ function required(name: string): string {
   return v;
 }
 
+/** 密钥强度校验：拒绝占位符与弱密钥（防止默认/已知密钥被用于伪造 token） */
+function secret(name: string): string {
+  const v = required(name);
+  const placeholderPattern = /请替换|replace|changeme|your-?secret|example/i;
+  if (placeholderPattern.test(v)) {
+    throw new Error(
+      `[env] ${name} 仍为占位符，请配置强随机密钥（如 openssl rand -base64 48）后重启`,
+    );
+  }
+  if (v.length < 32) {
+    throw new Error(`[env] ${name} 强度不足：长度须 ≥ 32 字符，请配置强随机密钥后重启`);
+  }
+  return v;
+}
+
 function optional(name: string, fallback = ''): string {
   return process.env[name] ?? fallback;
 }
@@ -27,8 +42,8 @@ export const env = {
   PORT: int('PORT', 3100),
   NODE_ENV: optional('NODE_ENV', 'development'),
 
-  // 鉴权（必填）
-  JWT_SECRET: required('JWT_SECRET'),
+  // 鉴权（必填；强度校验：拒绝占位符/弱密钥）
+  JWT_SECRET: secret('JWT_SECRET'),
   CSRF_SECRET: optional('CSRF_SECRET') || required('JWT_SECRET'),
 
   // 数据库
@@ -47,6 +62,17 @@ export const env = {
   // 启动期连接重试与退避（TypeORM retryAttempts / retryDelay）
   DB_RETRY_ATTEMPTS: int('DB_RETRY_ATTEMPTS', 5),
   DB_RETRY_DELAY: int('DB_RETRY_DELAY', 2000),
+  // 内嵌 MySQL（打包运行自带数据库，无需外挂实例）
+  //   auto=检出二进制则托管启动；true=强制（缺失报错）；false=关闭（连接外部 DB）
+  OPS_EMBEDDED_MYSQL: optional('OPS_EMBEDDED_MYSQL', 'auto'),
+  OPS_MYSQL_HOME: optional('OPS_MYSQL_HOME', ''),
+  OPS_MYSQL_DATA_DIR: optional('OPS_MYSQL_DATA_DIR', ''),
+  OPS_MYSQL_STOP_ON_EXIT: optional('OPS_MYSQL_STOP_ON_EXIT', 'false') === 'true',
+  // 启动期执行 SQL 迁移（本地打包运行推荐开启；开启时自动关闭 synchronize）
+  OPS_DB_MIGRATIONS_RUN: optional(
+    'OPS_DB_MIGRATIONS_RUN',
+    optional('NODE_ENV', 'development') === 'production' ? 'true' : 'false',
+  ) === 'true',
 
   // Redis
   REDIS_HOST: optional('REDIS_HOST', '127.0.0.1'),
@@ -82,6 +108,15 @@ export const env = {
 
   // FFmpeg（空=自动探测 PATH + 常见路径）
   OPS_FFMPEG_PATH: optional('OPS_FFMPEG_PATH', ''),
+  // AI 页面观察（浏览器快照）：目标前端基址 / 无头开关 / chromium 可执行路径
+  OPS_BROWSER_BASE: optional('OPS_BROWSER_BASE', 'http://localhost:5173'),
+  OPS_BROWSER_HEADLESS: optional('OPS_BROWSER_HEADLESS', 'true') === 'true',
+  OPS_BROWSER_EXECUTABLE: optional('OPS_BROWSER_EXECUTABLE', ''),
+  // 浏览器实例池容量（多租户并发工作；按机器内存与并发租户数调整）
+  OPS_BROWSER_MAX_INSTANCES: optional('OPS_BROWSER_MAX_INSTANCES', '5'),
+  OPS_BROWSER_MAX_PAGES_PER_INSTANCE: optional('OPS_BROWSER_MAX_PAGES_PER_INSTANCE', '10'),
+  OPS_BROWSER_KEEP_ALIVE_MS: optional('OPS_BROWSER_KEEP_ALIVE_MS', '300000'),
+  OPS_BROWSER_CLEANUP_IDLE_MS: optional('OPS_BROWSER_CLEANUP_IDLE_MS', '60000'),
   // 抖音开放平台（发布用；空=降级模拟回执）
   OPS_DOUYIN_APP_ID: optional('OPS_DOUYIN_APP_ID', ''),
   OPS_DOUYIN_APP_SECRET: optional('OPS_DOUYIN_APP_SECRET', ''),
@@ -107,10 +142,21 @@ export const env = {
   OPS_DATA_SECRET:
     optional('OPS_DATA_SECRET') || optional('JWT_SECRET', 'zhixiang-ops-data-secret'),
 
+  // 管理系统 SSO 验签密钥（缺省复用 JWT_SECRET）：
+  // 管理系统与运营系统共用密钥时无需配置；独立部署/密钥轮换时配置专用验签密钥，
+  // 避免两系统凭据任一泄露即双向伪造。
+  OPS_MS_JWT_SECRET: optional('OPS_MS_JWT_SECRET') || optional('JWT_SECRET', ''),
+
+  // 开放注册开关：false 时 /ops/auth/register 返回 REGISTER_DISABLED。
+  // 生产环境建议关闭（注册应走管理员邀请/员工管理），演示与首次部署可开启。
+  allowRegister: optional('OPS_ALLOW_REGISTER', 'true') === 'true',
+
   // 演示模式：开启后允许免密「演示登录」并在启动时自动种子演示数据；
   // 系统初始化（/ops/system/init）会清除演示租户的全部演示数据。默认关闭，避免演示数据混入正式环境。
   demoMode: optional('OPS_DEMO_MODE', 'false') === 'true',
   demoTenant: optional('OPS_DEMO_TENANT', 't_demo'),
+  demoUsername: optional('OPS_DEMO_USERNAME', 'demo'),
+  demoPassword: optional('OPS_DEMO_PASSWORD', 'Demo@123456'),
 };
 
 export type AppEnv = typeof env;

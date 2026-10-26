@@ -10,11 +10,12 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from '../../shared/pagination';
 import type { LlmProviderType } from './llm-provider.entity';
+import { LlmProviderFieldsDto } from './llm-fields.dto';
 
 const TYPES: LlmProviderType[] = ['ollama', 'openai', 'azure', 'custom'];
 
-/** 新增大模型提供方 */
-export class CreateLlmProviderDto {
+/** 新增大模型提供方；共用可选字段见 LlmProviderFieldsDto。 */
+export class CreateLlmProviderDto extends LlmProviderFieldsDto {
   @IsString()
   @MinLength(1)
   @MaxLength(120)
@@ -24,32 +25,12 @@ export class CreateLlmProviderDto {
   type!: LlmProviderType;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(512)
-  baseUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1024)
-  apiKey?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  defaultModel?: string;
-
-  @IsOptional()
   @IsBoolean()
   enabled?: boolean = true;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  remark?: string;
 }
 
-/** 更新大模型提供方（全字段可选；apiKey 传空字符串表示不修改） */
-export class UpdateLlmProviderDto {
+/** 更新大模型提供方（全字段可选；apiKey 传空字符串表示不修改）。共用字段见 LlmProviderFieldsDto。 */
+export class UpdateLlmProviderDto extends LlmProviderFieldsDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -60,28 +41,8 @@ export class UpdateLlmProviderDto {
   type?: LlmProviderType;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(512)
-  baseUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(1024)
-  apiKey?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  defaultModel?: string;
-
-  @IsOptional()
   @IsBoolean()
   enabled?: boolean;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  remark?: string;
 }
 
 /** 列表查询（分页 + 过滤） */

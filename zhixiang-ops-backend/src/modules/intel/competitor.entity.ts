@@ -22,14 +22,14 @@ export class CompetitorEntity extends BaseEntity {
   category?: string;
 
   /** 是否开启监控采集 */
-  @Column({ type: 'boolean', default: false })
+  @Column({ name: 'monitor_enabled', type: 'boolean', default: false })
   monitorEnabled: boolean;
 
   /** 最近一次采集时间（监控回填） */
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ name: 'last_collected_at', type: 'timestamp', nullable: true })
   lastCollectedAt?: Date;
 
   /** 健康度 0-100（监控采集回填） */
-  @Column({ type: 'int', default: 0 })
+  @Column({ name: 'health_score', type: 'int', default: 0 })
   healthScore: number;
 }

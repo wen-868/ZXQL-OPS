@@ -61,29 +61,51 @@ export class AccountService {
       identity: (dto.identity as AccountEntity['identity']) ?? 'matrix',
       track: dto.track,
       stage: (dto.stage as AccountEntity['stage']) ?? 'nurturing',
-      fansCount: dto.fansCount ?? 0,
-      followCount: dto.followCount ?? 0,
-      likeCount: dto.likeCount ?? 0,
+      fansCount: 0,
+      followCount: 0,
+      likeCount: 0,
+      ...AccountService.numericFields(dto),
       remark: dto.remark,
     });
 
-    // 绑定 Token → 加密存储 + 推导初始状态
-    if (dto.accessToken) {
-      account.tokenEnc = encryptSecret(dto.accessToken);
-      if (dto.refreshToken) account.refreshTokenEnc = encryptSecret(dto.refreshToken);
-      account.tokenExpireAt = dto.tokenExpireAt ? new Date(dto.tokenExpireAt) : undefined;
-      account.status = this.deriveStatusByToken(account.tokenExpireAt, 'unsigned');
-    } else {
-      account.status = 'unsigned';
-    }
+    this.applyTokenBinding(account, dto);
     account.healthScore = scoreBaseByStatus(account.status);
 
+    const saved = await this.saveOrDuplicate(account);
+    if (dto.accessToken) {
+      await this.logEvent(saved, 'connected', 'unsigned', saved.status, '首次绑定 Token');
+    }
+    return this.toView(saved);
+  }
+
+  private static readonly COUNT_FIELDS = ['fansCount', 'followCount', 'likeCount'] as const;
+
+  /** 计数字段：仅 dto 显式提供时覆盖默认 0 */
+  private static numericFields(dto: CreateAccountDto): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const key of AccountService.COUNT_FIELDS) {
+      const value = dto[key];
+      if (value !== undefined) out[key] = value;
+    }
+    return out;
+  }
+
+  /** 绑定 Token：加密落字段 + 推导初始状态；无 Token → unsigned */
+  private applyTokenBinding(account: AccountEntity, dto: CreateAccountDto): void {
+    if (!dto.accessToken) {
+      account.status = 'unsigned';
+      return;
+    }
+    account.tokenEnc = encryptSecret(dto.accessToken);
+    if (dto.refreshToken) account.refreshTokenEnc = encryptSecret(dto.refreshToken);
+    account.tokenExpireAt = dto.tokenExpireAt ? new Date(dto.tokenExpireAt) : undefined;
+    account.status = this.deriveStatusByToken(account.tokenExpireAt, 'unsigned');
+  }
+
+  /** 保存并把唯一键冲突翻译为 ACCOUNT_DUPLICATE */
+  private async saveOrDuplicate(account: AccountEntity): Promise<AccountEntity> {
     try {
-      const saved = await this.accountRepo.save(account);
-      if (dto.accessToken) {
-        await this.logEvent(saved, 'connected', 'unsigned', saved.status, '首次绑定 Token');
-      }
-      return this.toView(saved);
+      return await this.accountRepo.save(account);
     } catch (err) {
       if (err instanceof QueryFailedError && this.isDuplicate(err)) {
         throw new AppError('ACCOUNT_DUPLICATE');
@@ -105,14 +127,7 @@ export class AccountService {
     const qb = this.accountRepo
       .createQueryBuilder('a')
       .where('a.tenant_id = :tenantId', { tenantId });
-    if (query.platform) qb.andWhere('a.platform = :platform', { platform: query.platform });
-    if (query.identity) qb.andWhere('a.identity = :identity', { identity: query.identity });
-    if (query.stage) qb.andWhere('a.stage = :stage', { stage: query.stage });
-    if (query.status) qb.andWhere('a.status = :status', { status: query.status });
-    if (query.track) qb.andWhere('a.track = :track', { track: query.track });
-    if (query.keyword) {
-      qb.andWhere('a.nickname LIKE :kw', { kw: `%${query.keyword}%` });
-    }
+    AccountService.applyFilters(qb, query);
     qb.orderBy('a.created_at', 'DESC').skip(skip).take(take);
 
     const [rows, total] = await qb.getManyAndCount();
@@ -122,6 +137,29 @@ export class AccountService {
       query.page ?? 1,
       query.pageSize ?? 20,
     );
+  }
+
+  /** 列表筛选条件清单（精确匹配列 → 查询字段；空值跳过） */
+  private static readonly QUERY_EQ_FIELDS: Array<[keyof AccountQueryDto, string]> = [
+    ['platform', 'platform'],
+    ['identity', 'identity'],
+    ['stage', 'stage'],
+    ['status', 'status'],
+    ['track', 'track'],
+  ];
+
+  /** 逐项追加筛选条件（keyword 走昵称模糊匹配） */
+  private static applyFilters(
+    qb: ReturnType<Repository<AccountEntity>['createQueryBuilder']>,
+    query: AccountQueryDto,
+  ): void {
+    for (const [dtoKey, column] of AccountService.QUERY_EQ_FIELDS) {
+      const value = query[dtoKey];
+      if (value) qb.andWhere(`a.${column} = :${column}`, { [column]: value });
+    }
+    if (query.keyword) {
+      qb.andWhere('a.nickname LIKE :kw', { kw: `%${query.keyword}%` });
+    }
   }
 
   /** 详情（按 tenant 隔离） */
@@ -139,38 +177,14 @@ export class AccountService {
     if (!account) throw new AppError('ACCOUNT_NOT_FOUND');
 
     const prevStatus = account.status;
+    // 需类型转换的枚举字段显式赋值
     if (dto.platform) account.platform = dto.platform as AccountEntity['platform'];
-    if (dto.platformAccountId) account.platformAccountId = dto.platformAccountId;
-    if (dto.nickname !== undefined) account.nickname = dto.nickname;
-    if (dto.avatarUrl !== undefined) account.avatarUrl = dto.avatarUrl;
     if (dto.identity) account.identity = dto.identity as AccountEntity['identity'];
-    if (dto.track !== undefined) account.track = dto.track;
     if (dto.stage) account.stage = dto.stage as AccountEntity['stage'];
     if (dto.status) account.status = dto.status as AccountStatus;
-    if (dto.fansCount !== undefined) account.fansCount = dto.fansCount;
-    if (dto.followCount !== undefined) account.followCount = dto.followCount;
-    if (dto.likeCount !== undefined) account.likeCount = dto.likeCount;
-    if (dto.lastActiveAt) account.lastActiveAt = new Date(dto.lastActiveAt);
-    if (dto.remark !== undefined) account.remark = dto.remark;
-    if (dto.persona !== undefined) account.persona = dto.persona;
-    if ('groupId' in dto) {
-      if (dto.groupId != null) {
-        const group = await this.groupRepo.findOne({ where: { id: dto.groupId, tenantId } });
-        if (!group) throw new AppError('ACCOUNT_GROUP_NOT_FOUND');
-      }
-      account.groupId = dto.groupId ?? null;
-    }
-
-    if (dto.accessToken) {
-      account.tokenEnc = encryptSecret(dto.accessToken);
-      if (dto.refreshToken) account.refreshTokenEnc = encryptSecret(dto.refreshToken);
-      account.tokenExpireAt = dto.tokenExpireAt
-        ? new Date(dto.tokenExpireAt)
-        : account.tokenExpireAt;
-      if (!dto.status) {
-        account.status = this.deriveStatusByToken(account.tokenExpireAt, account.status);
-      }
-    }
+    this.applyScalarFields(account, dto);
+    await this.applyGroupField(account, dto, tenantId);
+    this.applyTokenFields(account, dto);
 
     await this.syncHealthScore(account);
     const saved = await this.accountRepo.save(account);
@@ -178,6 +192,53 @@ export class AccountService {
       await this.logEvent(saved, 'recovered', prevStatus, saved.status, '状态变更');
     }
     return this.toView(saved);
+  }
+
+  /** 可直赋标量字段批量写入（数据驱动，避免逐字段 if 堆叠） */
+  private applyScalarFields(account: AccountEntity, dto: UpdateAccountDto): void {
+    const scalars: Array<[keyof UpdateAccountDto, keyof AccountEntity]> = [
+      ['platformAccountId', 'platformAccountId'],
+      ['nickname', 'nickname'],
+      ['avatarUrl', 'avatarUrl'],
+      ['track', 'track'],
+      ['fansCount', 'fansCount'],
+      ['followCount', 'followCount'],
+      ['likeCount', 'likeCount'],
+      ['remark', 'remark'],
+      ['persona', 'persona'],
+    ];
+    for (const [dtoKey, entityKey] of scalars) {
+      const value = dto[dtoKey];
+      if (value !== undefined) {
+        (account as unknown as Record<string, unknown>)[entityKey] = value;
+      }
+    }
+    if (dto.lastActiveAt) account.lastActiveAt = new Date(dto.lastActiveAt);
+  }
+
+  /** 分组变更：目标分组需存在（租户内校验） */
+  private async applyGroupField(
+    account: AccountEntity,
+    dto: UpdateAccountDto,
+    tenantId: string,
+  ): Promise<void> {
+    if (!('groupId' in dto)) return;
+    if (dto.groupId != null) {
+      const group = await this.groupRepo.findOne({ where: { id: dto.groupId, tenantId } });
+      if (!group) throw new AppError('ACCOUNT_GROUP_NOT_FOUND');
+    }
+    account.groupId = dto.groupId ?? null;
+  }
+
+  /** Token 更新：重新加密 + 刷新有效期 + 按新有效期派生状态 */
+  private applyTokenFields(account: AccountEntity, dto: UpdateAccountDto): void {
+    if (!dto.accessToken) return;
+    account.tokenEnc = encryptSecret(dto.accessToken);
+    if (dto.refreshToken) account.refreshTokenEnc = encryptSecret(dto.refreshToken);
+    account.tokenExpireAt = dto.tokenExpireAt ? new Date(dto.tokenExpireAt) : account.tokenExpireAt;
+    if (!dto.status) {
+      account.status = this.deriveStatusByToken(account.tokenExpireAt, account.status);
+    }
   }
 
   /** 软删除（BaseEntity + DeleteDateColumn） */
@@ -461,6 +522,19 @@ export class AccountService {
     return { pairs, riskAccounts, evaluatedAt: new Date().toISOString() };
   }
 
+  /** 共享维度：IP / 设备 / 指纹（值为空不算共享） */
+  private static readonly ENV_DIMENSIONS = ['ip', 'device', 'fingerprint'] as const;
+
+  /** 两个环境配置的共享维度列表（无共享返回空数组） */
+  private static sharedDimensions(x: AccountEnvEntity, y: AccountEnvEntity): string[] {
+    const shared: string[] = [];
+    for (const dim of AccountService.ENV_DIMENSIONS) {
+      const v = x[dim];
+      if (v && v === y[dim]) shared.push(dim);
+    }
+    return shared;
+  }
+
   /** 关联度计算（纯函数，不写库）：供 advancedMatrix / evaluateAntiAssociate 复用 */
   private computeAssociations(envs: AccountEnvEntity[]): {
     pairs: Array<{ a: number; b: number; shared: string[]; score: number }>;
@@ -472,11 +546,7 @@ export class AccountService {
       for (let j = i + 1; j < envs.length; j++) {
         const x = envs[i];
         const y = envs[j];
-        const shared: string[] = [];
-        if (x.ip && y.ip && x.ip === y.ip) shared.push('ip');
-        if (x.device && y.device && x.device === y.device) shared.push('device');
-        if (x.fingerprint && y.fingerprint && x.fingerprint === y.fingerprint)
-          shared.push('fingerprint');
+        const shared = AccountService.sharedDimensions(x, y);
         if (!shared.length) continue;
         const score = Math.min(100, 40 + (shared.length - 1) * 30);
         pairs.push({ a: x.accountId, b: y.accountId, shared, score });

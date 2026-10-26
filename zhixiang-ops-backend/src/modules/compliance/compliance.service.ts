@@ -18,6 +18,14 @@ import { AddComplianceWordDto, UpdateComplianceWordDto } from './dto/add-word.dt
 import { QueryWordsDto } from './dto/query-words.dto';
 import { QueryLogsDto } from './dto/query-logs.dto';
 
+/** level → 评分映射表（替代三目链） */
+const LEVEL_SCORE: Record<ComplianceLevel, number> = { none: 0, low: 20, medium: 60, high: 100 };
+
+/** 文本预览：超长截断至 500 字，避免日志字段过大 */
+function previewText(text: string): string {
+  return text.length > 500 ? text.slice(0, 500) : text;
+}
+
 /**
  * 合规预检服务（规划 §4-P / 合规风控核心域）。
  * 统一违禁词预检入口 checkText，被 F 脚本 / H 成片 / I 发布 / K 直播 / AA 客服 依赖；
@@ -40,17 +48,10 @@ export class ComplianceService {
     const tenantId = TenantContext.requireTenantId();
     const words = await this.ensureWords(tenantId);
 
-    const hits: ComplianceHit[] = [];
-    for (const w of words) {
-      let idx = text.indexOf(w.word);
-      while (idx >= 0) {
-        hits.push({ word: w.word, position: idx, level: w.level });
-        idx = text.indexOf(w.word, idx + w.word.length);
-      }
-    }
+    const hits = ComplianceService.collectHits(text, words);
 
     const level = hits.reduce<ComplianceLevel>((acc, h) => maxLevel(acc, h.level), 'none');
-    const score = level === 'high' ? 100 : level === 'medium' ? 60 : level === 'low' ? 20 : 0;
+    const score = LEVEL_SCORE[level];
     const result: ComplianceResult =
       level === 'high' ? 'block' : level === 'medium' ? 'warn' : 'pass';
     const checkedAt = new Date().toISOString();
@@ -60,7 +61,7 @@ export class ComplianceService {
         tenantId,
         scene,
         sourceId: null,
-        text: text.length > 500 ? text.slice(0, 500) : text,
+        text: previewText(text),
         hits,
         level,
         score,
@@ -69,6 +70,19 @@ export class ComplianceService {
     );
 
     return { hits, level, score, result, checkedAt };
+  }
+
+  /** 逐词扫描全部出现位置（同一词多处命中均记录） */
+  private static collectHits(text: string, words: ComplianceWordEntity[]): ComplianceHit[] {
+    const hits: ComplianceHit[] = [];
+    for (const w of words) {
+      let idx = text.indexOf(w.word);
+      while (idx >= 0) {
+        hits.push({ word: w.word, position: idx, level: w.level });
+        idx = text.indexOf(w.word, idx + w.word.length);
+      }
+    }
+    return hits;
   }
 
   /** 词库为空时 lazy 种子（保留阶段1 内嵌 BANNED_WORDS 语义，避免首次预检全 miss） */

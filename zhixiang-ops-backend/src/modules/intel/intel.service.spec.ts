@@ -1,14 +1,23 @@
 import { Repository } from 'typeorm';
 import { IntelService } from './intel.service';
+import { RedisService } from '../../cache/redis.service';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CompetitorEntity } from './competitor.entity';
 import { CollectedCommentEntity } from './collected-comment.entity';
 import { CollectTaskEntity } from './collect-task.entity';
+import { CollectSourceEntity } from './collect-source.entity';
 import { HotSnapshotEntity } from './hot-snapshot.entity';
 import { CollectRateLimiter } from './rate-limiter';
 import { CollectorGateway } from './collector/collector.gateway';
 import { RawComment, RawHot } from './collector/collector.adapter';
-import { CollectTaskStatus, CollectTaskType, HotType, SourceLevel } from './intel.types';
+import {
+  CollectControlAction,
+  CollectTaskStatus,
+  CollectTaskType,
+  CommentReviewStatus,
+  HotType,
+  SourceLevel,
+} from './intel.types';
 import { CreateCompetitorDto } from './dto/create-competitor.dto';
 import { CreateCollectTaskDto } from './dto/create-collect-task.dto';
 import { KeywordMineDto } from './dto/keyword-mine.dto';
@@ -30,6 +39,10 @@ type Repo<T> = {
   save: jest.Mock<Promise<T>, [Partial<T>]>;
   findOne: jest.Mock<Promise<T | null>, [FindOpts]>;
   find: jest.Mock<Promise<T[]>, [FindOpts]>;
+  update: jest.Mock<
+    Promise<{ affected?: number }>,
+    [Record<string, unknown>, Record<string, unknown>]
+  >;
   softDelete: jest.Mock<Promise<{ affected?: number }>, [Record<string, unknown>]>;
   createQueryBuilder: jest.Mock<unknown, [unknown?]>;
 };
@@ -67,9 +80,15 @@ describe('IntelService', () => {
   let mockCompetitorRepo: Repo<CompetitorEntity>;
   let mockCommentRepo: Repo<CollectedCommentEntity>;
   let mockTaskRepo: Repo<CollectTaskEntity>;
+  let mockSourceRepo: Repo<CollectSourceEntity>;
   let mockHotRepo: Repo<HotSnapshotEntity>;
   let mockRateLimiter: { allow: jest.Mock<Promise<boolean>, [string, string, number, number]> };
   let mockGateway: { resolve: jest.Mock<MockAdapter, [string]> };
+  let mockRedis: {
+    getJson: jest.Mock<Promise<unknown>, [string]>;
+    setJson: jest.Mock<Promise<void>, [string, unknown, number?]>;
+    del: jest.Mock<Promise<number>, [string]>;
+  };
   let fakeAdapter: MockAdapter;
   let qb: Qb;
 
@@ -87,6 +106,9 @@ describe('IntelService', () => {
         .mockImplementation((e) => Promise.resolve(e as CompetitorEntity)),
       findOne: jest.fn<Promise<CompetitorEntity | null>, [FindOpts]>(),
       find: jest.fn<Promise<CompetitorEntity[]>, [FindOpts]>().mockResolvedValue([]),
+      update: jest
+        .fn<Promise<{ affected?: number }>, [Record<string, unknown>, Record<string, unknown>]>()
+        .mockResolvedValue({ affected: 1 }),
       softDelete: jest
         .fn<Promise<{ affected?: number }>, [Record<string, unknown>]>()
         .mockResolvedValue({ affected: 1 }),
@@ -101,6 +123,9 @@ describe('IntelService', () => {
         .mockImplementation((e) => Promise.resolve(e as CollectedCommentEntity)),
       findOne: jest.fn<Promise<CollectedCommentEntity | null>, [FindOpts]>(),
       find: jest.fn<Promise<CollectedCommentEntity[]>, [FindOpts]>().mockResolvedValue([]),
+      update: jest
+        .fn<Promise<{ affected?: number }>, [Record<string, unknown>, Record<string, unknown>]>()
+        .mockResolvedValue({ affected: 1 }),
       softDelete: jest
         .fn<Promise<{ affected?: number }>, [Record<string, unknown>]>()
         .mockResolvedValue({ affected: 1 }),
@@ -115,6 +140,9 @@ describe('IntelService', () => {
         .mockImplementation((e) => Promise.resolve(e as CollectTaskEntity)),
       findOne: jest.fn<Promise<CollectTaskEntity | null>, [FindOpts]>(),
       find: jest.fn<Promise<CollectTaskEntity[]>, [FindOpts]>().mockResolvedValue([]),
+      update: jest
+        .fn<Promise<{ affected?: number }>, [Record<string, unknown>, Record<string, unknown>]>()
+        .mockResolvedValue({ affected: 1 }),
       softDelete: jest
         .fn<Promise<{ affected?: number }>, [Record<string, unknown>]>()
         .mockResolvedValue({ affected: 1 }),
@@ -129,10 +157,18 @@ describe('IntelService', () => {
         .mockImplementation((e) => Promise.resolve(e as HotSnapshotEntity)),
       findOne: jest.fn<Promise<HotSnapshotEntity | null>, [FindOpts]>(),
       find: jest.fn<Promise<HotSnapshotEntity[]>, [FindOpts]>().mockResolvedValue([]),
+      update: jest
+        .fn<Promise<{ affected?: number }>, [Record<string, unknown>, Record<string, unknown>]>()
+        .mockResolvedValue({ affected: 1 }),
       softDelete: jest
         .fn<Promise<{ affected?: number }>, [Record<string, unknown>]>()
         .mockResolvedValue({ affected: 1 }),
       createQueryBuilder: jest.fn<unknown, [unknown?]>().mockReturnValue(qb),
+    };
+    mockRedis = {
+      getJson: jest.fn<Promise<unknown>, [string]>().mockResolvedValue(null),
+      setJson: jest.fn<Promise<void>, [string, unknown, number?]>().mockResolvedValue(undefined),
+      del: jest.fn<Promise<number>, [string]>().mockResolvedValue(1),
     };
     mockRateLimiter = {
       allow: jest.fn<Promise<boolean>, [string, string, number, number]>().mockResolvedValue(true),
@@ -140,13 +176,32 @@ describe('IntelService', () => {
     mockGateway = {
       resolve: jest.fn<MockAdapter, [string]>().mockReturnValue(fakeAdapter),
     };
+    mockSourceRepo = {
+      create: jest.fn<CollectSourceEntity, [Partial<CollectSourceEntity>]>(
+        (e) => e as CollectSourceEntity,
+      ),
+      save: jest
+        .fn<Promise<CollectSourceEntity>, [Partial<CollectSourceEntity>]>()
+        .mockImplementation((e) => Promise.resolve(e as CollectSourceEntity)),
+      findOne: jest.fn<Promise<CollectSourceEntity | null>, [FindOpts]>(),
+      find: jest.fn<Promise<CollectSourceEntity[]>, [FindOpts]>().mockResolvedValue([]),
+      update: jest
+        .fn<Promise<{ affected?: number }>, [Record<string, unknown>, Record<string, unknown>]>()
+        .mockResolvedValue({ affected: 1 }),
+      softDelete: jest
+        .fn<Promise<{ affected?: number }>, [Record<string, unknown>]>()
+        .mockResolvedValue({ affected: 1 }),
+      createQueryBuilder: jest.fn<unknown, [unknown?]>().mockReturnValue(qb),
+    };
     svc = new IntelService(
       mockCompetitorRepo as unknown as Repository<CompetitorEntity>,
       mockCommentRepo as unknown as Repository<CollectedCommentEntity>,
       mockTaskRepo as unknown as Repository<CollectTaskEntity>,
+      mockSourceRepo as unknown as Repository<CollectSourceEntity>,
       mockHotRepo as unknown as Repository<HotSnapshotEntity>,
       mockRateLimiter as unknown as CollectRateLimiter,
       mockGateway as unknown as CollectorGateway,
+      mockRedis as unknown as RedisService,
     );
   });
 
@@ -370,7 +425,7 @@ describe('IntelService', () => {
         svc.getCollectTask(7),
       );
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         status: CollectTaskStatus.Done,
         progress: 100,
         collectedCount: 3,
@@ -560,6 +615,46 @@ describe('IntelService', () => {
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('getHot 无平台参数：命中 Redis 缓存则不查库', async () => {
+      const cached = [{ id: 9, tenantId: 'tn-1', title: '缓存热点' }];
+      mockRedis.getJson.mockResolvedValueOnce(cached);
+      mockHotRepo.find.mockResolvedValueOnce([]);
+
+      const result = await TenantContext.run({ traceId: 't12c', tenantId: 'tn-1' }, () =>
+        svc.getHot(),
+      );
+
+      expect(mockHotRepo.find).not.toHaveBeenCalled();
+      expect(result.length).toBe(1);
+      expect(result[0].title).toBe('缓存热点');
+    });
+
+    it('getHot 无平台参数：缓存未命中则查库并回填缓存（TTL 60s）', async () => {
+      mockRedis.getJson.mockResolvedValueOnce(null);
+      const rows = [{ id: 3, tenantId: 'tn-1', title: 'DB热点' }];
+      mockHotRepo.find.mockResolvedValueOnce(rows as unknown as HotSnapshotEntity[]);
+
+      const result = await TenantContext.run({ traceId: 't12d', tenantId: 'tn-1' }, () =>
+        svc.getHot(),
+      );
+
+      expect(mockHotRepo.find).toHaveBeenCalledTimes(1);
+      expect(result.length).toBe(1);
+      expect(mockRedis.setJson).toHaveBeenCalledWith(
+        'intel:hot:tn-1:video',
+        rows,
+        expect.any(Number),
+      );
+    });
+
+    it('getHot 抓取后失效缓存键（下次读库回填）', async () => {
+      fakeAdapter.fetchHot.mockResolvedValueOnce([]);
+      await TenantContext.run({ traceId: 't12e', tenantId: 'tn-1' }, () =>
+        svc.getHot('douyin', HotType.Video),
+      );
+      expect(mockRedis.del).toHaveBeenCalledWith('intel:hot:tn-1:video');
+    });
   });
 
   // —— 附加：无 TenantContext 调用应抛 TENANT_REQUIRED ——
@@ -569,6 +664,450 @@ describe('IntelService', () => {
       await expect(svc.createCompetitor(dto)).rejects.toMatchObject({
         code: 'TENANT_REQUIRED',
       });
+    });
+  });
+
+  // —— 验收点 13：采集源配置 CRUD ——
+  describe('采集源配置（createSource/listSources/updateSource/removeSource）', () => {
+    it('createSource：默认 enabled=true、collectCount=0、清洗全开，可覆盖 cleaning', async () => {
+      const result = await TenantContext.run({ traceId: 't13a', tenantId: 'tn-1' }, () =>
+        svc.createSource({
+          name: '抖音公开搜索',
+          platform: 'douyin',
+          sourceType: 'keyword',
+          target: '护肤',
+          mode: 'search',
+          cleaning: { reviewRequired: true },
+        }),
+      );
+      expect(result.tenantId).toBe('tn-1');
+      expect(result.enabled).toBe(true);
+      expect(result.collectCount).toBe(0);
+      expect(result.cleaning).toMatchObject({
+        dedup: true,
+        piiStrip: true,
+        adFilter: true,
+        reviewRequired: true,
+      });
+      expect(mockSourceRepo.create.mock.calls[0][0].tenantId).toBe('tn-1');
+    });
+
+    it('listSources 按 tenantId 过滤并按 createdAt 倒序', async () => {
+      mockSourceRepo.find.mockResolvedValueOnce([]);
+      await TenantContext.run({ traceId: 't13b', tenantId: 'tn-1' }, () => svc.listSources());
+      expect(mockSourceRepo.find.mock.calls[0][0]).toMatchObject({
+        where: { tenantId: 'tn-1' },
+        order: { createdAt: 'DESC' },
+      });
+    });
+
+    it('updateSource：只更新传入字段，清洗按 DEFAULT 合并', async () => {
+      mockSourceRepo.findOne.mockResolvedValueOnce({
+        id: 3,
+        tenantId: 'tn-1',
+        name: 'old',
+        cleaning: { dedup: true, piiStrip: true, adFilter: true, reviewRequired: false },
+      } as unknown as CollectSourceEntity);
+      const result = await TenantContext.run({ traceId: 't13c', tenantId: 'tn-1' }, () =>
+        svc.updateSource(3, { name: 'new-name', enabled: false }),
+      );
+      expect(result.name).toBe('new-name');
+      expect(result.enabled).toBe(false);
+      expect(result.cleaning).toMatchObject({ dedup: true, reviewRequired: false });
+    });
+
+    it('updateSource 不存在 → COLLECT_SOURCE_NOT_FOUND', async () => {
+      mockSourceRepo.findOne.mockResolvedValueOnce(null);
+      await expect(
+        TenantContext.run({ traceId: 't13d', tenantId: 'tn-1' }, () =>
+          svc.updateSource(99, { name: 'x' }),
+        ),
+      ).rejects.toMatchObject({ code: 'COLLECT_SOURCE_NOT_FOUND' });
+    });
+
+    it('removeSource 软删除并返回 id', async () => {
+      mockSourceRepo.findOne.mockResolvedValueOnce({
+        id: 3,
+        tenantId: 'tn-1',
+      } as unknown as CollectSourceEntity);
+      const result = await TenantContext.run({ traceId: 't13e', tenantId: 'tn-1' }, () =>
+        svc.removeSource(3),
+      );
+      expect(result).toEqual({ id: 3 });
+      expect(mockSourceRepo.softDelete).toHaveBeenCalledWith({ id: 3, tenantId: 'tn-1' });
+    });
+  });
+
+  // —— 验收点 14：由采集源发起采集（继承配置） ——
+  describe('collectFromSource', () => {
+    it('继承源配置：type/target/platform/sourceLevel/sourceId/cleaning/config 全部回填任务', async () => {
+      mockSourceRepo.findOne.mockResolvedValueOnce({
+        id: 3,
+        tenantId: 'tn-1',
+        sourceType: 'keyword',
+        target: '面膜',
+        platform: 'xiaohongshu',
+        enabled: true,
+        rateLimit: 5,
+        cleaning: { dedup: false, reviewRequired: true },
+        config: { region: 'cn' },
+      } as unknown as CollectSourceEntity);
+      mockTaskRepo.save.mockResolvedValueOnce({
+        id: 55,
+        tenantId: 'tn-1',
+      } as unknown as CollectTaskEntity);
+
+      const result = await TenantContext.run({ traceId: 't14a', tenantId: 'tn-1' }, () =>
+        svc.collectFromSource(3),
+      );
+
+      expect(result.taskId).toBeDefined();
+      const created = mockTaskRepo.create.mock.calls[0][0];
+      expect(created).toMatchObject({
+        type: CollectTaskType.Keyword,
+        target: '面膜',
+        platform: 'xiaohongshu',
+        sourceLevel: 'L2',
+        sourceId: 3,
+        cleaning: { dedup: false, reviewRequired: true },
+        config: { region: 'cn' },
+      });
+      expect(mockTaskRepo.save).toHaveBeenCalled();
+    });
+
+    it('源不存在 → COLLECT_SOURCE_NOT_FOUND', async () => {
+      mockSourceRepo.findOne.mockResolvedValueOnce(null);
+      await expect(
+        TenantContext.run({ traceId: 't14b', tenantId: 'tn-1' }, () => svc.collectFromSource(9)),
+      ).rejects.toMatchObject({ code: 'COLLECT_SOURCE_NOT_FOUND' });
+    });
+
+    it('源被禁用 → COLLECT_SOURCE_DISABLED，且不创建任务', async () => {
+      mockSourceRepo.findOne.mockResolvedValueOnce({
+        id: 3,
+        tenantId: 'tn-1',
+        enabled: false,
+      } as unknown as CollectSourceEntity);
+      await expect(
+        TenantContext.run({ traceId: 't14c', tenantId: 'tn-1' }, () => svc.collectFromSource(3)),
+      ).rejects.toMatchObject({ code: 'COLLECT_SOURCE_DISABLED' });
+      expect(mockTaskRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
+  // —— 验收点 15：任务生命周期控制 ——
+  describe('controlCollectTask', () => {
+    it('pause：pending → paused，记录 pausedAt', async () => {
+      mockTaskRepo.findOne.mockResolvedValueOnce({
+        id: 5,
+        tenantId: 'tn-1',
+        status: CollectTaskStatus.Pending,
+      } as unknown as CollectTaskEntity);
+      const result = await TenantContext.run({ traceId: 't15a', tenantId: 'tn-1' }, () =>
+        svc.controlCollectTask(5, CollectControlAction.Pause),
+      );
+      expect(result.status).toBe(CollectTaskStatus.Paused);
+      expect(result.pausedAt).toBeInstanceOf(Date);
+    });
+
+    it('resume：paused → pending，pausedAt 清空', async () => {
+      mockTaskRepo.findOne.mockResolvedValueOnce({
+        id: 5,
+        tenantId: 'tn-1',
+        status: CollectTaskStatus.Paused,
+      } as unknown as CollectTaskEntity);
+      const result = await TenantContext.run({ traceId: 't15b', tenantId: 'tn-1' }, () =>
+        svc.controlCollectTask(5, CollectControlAction.Resume),
+      );
+      expect(result.status).toBe(CollectTaskStatus.Pending);
+      expect(result.pausedAt).toBeUndefined();
+    });
+
+    it('cancel：running → cancelled，记录 finishedAt', async () => {
+      mockTaskRepo.findOne.mockResolvedValueOnce({
+        id: 5,
+        tenantId: 'tn-1',
+        status: CollectTaskStatus.Running,
+      } as unknown as CollectTaskEntity);
+      const result = await TenantContext.run({ traceId: 't15c', tenantId: 'tn-1' }, () =>
+        svc.controlCollectTask(5, CollectControlAction.Cancel),
+      );
+      expect(result.status).toBe(CollectTaskStatus.Cancelled);
+      expect(result.finishedAt).toBeInstanceOf(Date);
+    });
+
+    it('retry：failed → pending，retryCount+1，errorMsg/finishedAt 清空', async () => {
+      mockTaskRepo.findOne.mockResolvedValueOnce({
+        id: 5,
+        tenantId: 'tn-1',
+        status: CollectTaskStatus.Failed,
+        retryCount: 1,
+        errorMsg: 'boom',
+        finishedAt: new Date(),
+      } as unknown as CollectTaskEntity);
+      const result = await TenantContext.run({ traceId: 't15d', tenantId: 'tn-1' }, () =>
+        svc.controlCollectTask(5, CollectControlAction.Retry),
+      );
+      expect(result.status).toBe(CollectTaskStatus.Pending);
+      expect(result.retryCount).toBe(2);
+      expect(result.errorMsg).toBeUndefined();
+      expect(result.finishedAt).toBeUndefined();
+    });
+
+    it('done 任务不可暂停 → COLLECT_TASK_STATE_INVALID', async () => {
+      mockTaskRepo.findOne.mockResolvedValueOnce({
+        id: 5,
+        tenantId: 'tn-1',
+        status: CollectTaskStatus.Done,
+      } as unknown as CollectTaskEntity);
+      await expect(
+        TenantContext.run({ traceId: 't15e', tenantId: 'tn-1' }, () =>
+          svc.controlCollectTask(5, CollectControlAction.Pause),
+        ),
+      ).rejects.toMatchObject({ code: 'COLLECT_TASK_STATE_INVALID' });
+    });
+
+    it('任务不存在 → COLLECT_TASK_NOT_FOUND', async () => {
+      mockTaskRepo.findOne.mockResolvedValueOnce(null);
+      await expect(
+        TenantContext.run({ traceId: 't15f', tenantId: 'tn-1' }, () =>
+          svc.controlCollectTask(5, CollectControlAction.Pause),
+        ),
+      ).rejects.toMatchObject({ code: 'COLLECT_TASK_NOT_FOUND' });
+    });
+  });
+
+  // —— 验收点 16：工作器跳过 暂停/取消，running 中取消弃结果 ——
+  describe('processPendingTasks 生命周期协作', () => {
+    it('paused 任务不进入工作器队列（不 resolve 适配器）', async () => {
+      mockTaskRepo.find.mockResolvedValueOnce([]);
+      await svc.processPendingTasks();
+      expect(fakeAdapter.fetchComments).not.toHaveBeenCalled();
+    });
+
+    it('取数期间被 cancel：弃结果不落库，任务保持 cancelled', async () => {
+      const pendingTask = {
+        id: 400,
+        tenantId: 'tn-1',
+        platform: 'douyin',
+        status: CollectTaskStatus.Pending,
+      } as unknown as CollectTaskEntity;
+      mockTaskRepo.find.mockResolvedValueOnce([pendingTask]);
+      fakeAdapter.fetchComments.mockResolvedValueOnce([
+        { sourceRef: 'r1', content: '本应被丢弃的评论' },
+      ]);
+      mockTaskRepo.findOne.mockResolvedValueOnce({
+        id: 400,
+        tenantId: 'tn-1',
+        status: CollectTaskStatus.Cancelled,
+      } as unknown as CollectTaskEntity);
+
+      await svc.processPendingTasks();
+
+      expect(mockCommentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('done 后回写源统计：collectCount 累加、lastCollectedAt 更新', async () => {
+      const pendingTask = {
+        id: 401,
+        tenantId: 'tn-1',
+        platform: 'douyin',
+        status: CollectTaskStatus.Pending,
+        sourceId: 3,
+      } as unknown as CollectTaskEntity;
+      mockTaskRepo.find.mockResolvedValueOnce([pendingTask]);
+      fakeAdapter.fetchComments.mockResolvedValueOnce([{ sourceRef: 'r1', content: '评论A' }]);
+      mockCommentRepo.findOne.mockResolvedValue(null);
+      mockTaskRepo.findOne.mockResolvedValueOnce(pendingTask);
+      mockSourceRepo.findOne.mockResolvedValueOnce({
+        id: 3,
+        tenantId: 'tn-1',
+        collectCount: 10,
+      } as unknown as CollectSourceEntity);
+
+      await svc.processPendingTasks();
+
+      expect(mockSourceRepo.save).toHaveBeenCalled();
+      const sourceSaved = mockSourceRepo.save.mock.calls.map(
+        (c: [Partial<CollectSourceEntity>]) => c[0],
+      ) as unknown as CollectSourceEntity[];
+      expect(sourceSaved[sourceSaved.length - 1].collectCount).toBe(11);
+    });
+  });
+
+  // —— 验收点 17：清洗开关组合 ——
+  describe('清洗开关（reviewRequired/dedup/piiStrip）', () => {
+    it('reviewRequired=true → 评论落库 review_status=pending（送人工审核）', async () => {
+      const pendingTask = {
+        id: 500,
+        tenantId: 'tn-1',
+        platform: 'douyin',
+        status: CollectTaskStatus.Pending,
+        cleaning: {
+          dedup: true,
+          piiStrip: true,
+          adFilter: true,
+          reviewRequired: true,
+        },
+      } as unknown as CollectTaskEntity;
+      mockTaskRepo.find.mockResolvedValueOnce([pendingTask]);
+      fakeAdapter.fetchComments.mockResolvedValueOnce([{ sourceRef: 'r1', content: '正常评论' }]);
+      mockCommentRepo.findOne.mockResolvedValue(null);
+
+      await svc.processPendingTasks();
+
+      const saved = mockCommentRepo.save.mock.calls.map(
+        (c: [Partial<CollectedCommentEntity>]) => c[0],
+      ) as unknown as CollectedCommentEntity[];
+      expect(saved[0].reviewStatus).toBe(CommentReviewStatus.Pending);
+    });
+
+    it('reviewRequired=false（默认）→ 评论直接 approved', async () => {
+      const pendingTask = {
+        id: 501,
+        tenantId: 'tn-1',
+        platform: 'douyin',
+        status: CollectTaskStatus.Pending,
+        cleaning: {
+          dedup: true,
+          piiStrip: true,
+          adFilter: true,
+          reviewRequired: false,
+        },
+      } as unknown as CollectTaskEntity;
+      mockTaskRepo.find.mockResolvedValueOnce([pendingTask]);
+      fakeAdapter.fetchComments.mockResolvedValueOnce([{ sourceRef: 'r1', content: '正常评论' }]);
+      mockCommentRepo.findOne.mockResolvedValue(null);
+
+      await svc.processPendingTasks();
+
+      const saved = mockCommentRepo.save.mock.calls.map(
+        (c: [Partial<CollectedCommentEntity>]) => c[0],
+      ) as unknown as CollectedCommentEntity[];
+      expect(saved[0].reviewStatus).toBe(CommentReviewStatus.Approved);
+    });
+
+    it('piiStrip=false → 手机号保留不脱敏', async () => {
+      const pendingTask = {
+        id: 502,
+        tenantId: 'tn-1',
+        platform: 'douyin',
+        status: CollectTaskStatus.Pending,
+        cleaning: { dedup: true, piiStrip: false, adFilter: true, reviewRequired: false },
+      } as unknown as CollectTaskEntity;
+      mockTaskRepo.find.mockResolvedValueOnce([pendingTask]);
+      fakeAdapter.fetchComments.mockResolvedValueOnce([
+        { sourceRef: 'r1', content: '电话13800138000' },
+      ]);
+      mockCommentRepo.findOne.mockResolvedValue(null);
+
+      await svc.processPendingTasks();
+
+      const saved = mockCommentRepo.save.mock.calls.map(
+        (c: [Partial<CollectedCommentEntity>]) => c[0],
+      ) as unknown as CollectedCommentEntity[];
+      expect(saved[0].content).toContain('13800138000');
+    });
+
+    it('dedup=false → 同 sourceRef+content 重复也入库', async () => {
+      const pendingTask = {
+        id: 503,
+        tenantId: 'tn-1',
+        platform: 'douyin',
+        status: CollectTaskStatus.Pending,
+        cleaning: { dedup: false, piiStrip: true, adFilter: true, reviewRequired: false },
+      } as unknown as CollectTaskEntity;
+      mockTaskRepo.find.mockResolvedValueOnce([pendingTask]);
+      fakeAdapter.fetchComments.mockResolvedValueOnce([
+        { sourceRef: 'dup', content: '重复评论' },
+        { sourceRef: 'dup', content: '重复评论' },
+      ]);
+      mockCommentRepo.findOne.mockResolvedValue(null);
+
+      await svc.processPendingTasks();
+
+      expect(mockCommentRepo.save).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // —— 验收点 18：评论审核（单条 + 批量） ——
+  describe('reviewComment / reviewCommentsBatch', () => {
+    it('单条：pending → approved 后落库', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 9,
+        tenantId: 'tn-1',
+        reviewStatus: CommentReviewStatus.Pending,
+      } as unknown as CollectedCommentEntity);
+      const result = await TenantContext.run({ traceId: 't18a', tenantId: 'tn-1' }, () =>
+        svc.reviewComment(9, CommentReviewStatus.Approved),
+      );
+      expect(result.reviewStatus).toBe(CommentReviewStatus.Approved);
+      expect(mockCommentRepo.save).toHaveBeenCalled();
+    });
+
+    it('评论不存在 → COMMENT_NOT_FOUND', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce(null);
+      await expect(
+        TenantContext.run({ traceId: 't18b', tenantId: 'tn-1' }, () =>
+          svc.reviewComment(9, CommentReviewStatus.Approved),
+        ),
+      ).rejects.toMatchObject({ code: 'COMMENT_NOT_FOUND' });
+    });
+
+    it('非法审核状态 → COMMENT_REVIEW_INVALID', async () => {
+      mockCommentRepo.findOne.mockResolvedValueOnce({
+        id: 9,
+        tenantId: 'tn-1',
+      } as unknown as CollectedCommentEntity);
+      await expect(
+        TenantContext.run({ traceId: 't18c', tenantId: 'tn-1' }, () =>
+          svc.reviewComment(9, 'whatever' as CommentReviewStatus),
+        ),
+      ).rejects.toMatchObject({ code: 'COMMENT_REVIEW_INVALID' });
+    });
+
+    it('批量：update 按 ids+tenantId 条件执行，返回 updated 数', async () => {
+      (
+        mockCommentRepo.update as jest.Mock<Promise<{ affected?: number }>, unknown[]>
+      ).mockResolvedValueOnce({ affected: 2 });
+      const result = await TenantContext.run({ traceId: 't18d', tenantId: 'tn-1' }, () =>
+        svc.reviewCommentsBatch([7, 8], CommentReviewStatus.Rejected),
+      );
+      expect(result).toEqual({ updated: 2 });
+      const [criteria, patch] = mockCommentRepo.update.mock.calls[0];
+      expect(criteria['tenantId']).toBe('tn-1');
+      expect((criteria['id'] as { _value: unknown[] })._value).toEqual([7, 8]);
+      expect(patch).toEqual({ reviewStatus: CommentReviewStatus.Rejected });
+    });
+
+    it('批量：空 ids → updated=0 且不调 update', async () => {
+      const result = await TenantContext.run({ traceId: 't18e', tenantId: 'tn-1' }, () =>
+        svc.reviewCommentsBatch([], CommentReviewStatus.Approved),
+      );
+      expect(result).toEqual({ updated: 0 });
+      expect(mockCommentRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // —— 验收点 19：干净评论查询支持审核状态过滤 ——
+  describe('findCleanComments', () => {
+    it('传 reviewStatus 时 andWhere 带 review_status 条件，返回 buildPage 结构', async () => {
+      await TenantContext.run({ traceId: 't19a', tenantId: 'tn-1' }, () =>
+        svc.findCleanComments({ page: 1, pageSize: 10, reviewStatus: CommentReviewStatus.Pending }),
+      );
+      expect(qb.andWhere).toHaveBeenCalledWith('c.review_status = :reviewStatus', {
+        reviewStatus: 'pending',
+      });
+      expect(qb.orderBy).toHaveBeenCalledWith('c.collected_at', 'DESC');
+      expect(qb.getManyAndCount).toHaveBeenCalled();
+    });
+
+    it('不传 reviewStatus → 不加该条件', async () => {
+      await TenantContext.run({ traceId: 't19b', tenantId: 'tn-1' }, () =>
+        svc.findCleanComments({ page: 1, pageSize: 10 }),
+      );
+      const calls = qb.andWhere.mock.calls.map((c) => c[0]);
+      expect(calls).not.toContain('c.review_status = :reviewStatus');
     });
   });
 });

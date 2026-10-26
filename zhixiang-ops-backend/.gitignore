@@ -25,3 +25,9 @@ yarn-error.log*
 
 # Coverage
 /coverage
+
+# 内嵌 MySQL（二进制与数据目录，不入库）
+/vendor
+/mysql-data
+/mysql-data2
+/.mysql-data

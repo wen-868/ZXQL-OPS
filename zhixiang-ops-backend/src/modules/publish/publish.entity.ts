@@ -67,4 +67,16 @@ export class PublishTaskEntity extends BaseEntity {
 
   @Column({ type: 'datetime', nullable: true })
   publishedAt?: Date | null;
+
+  /**
+   * 是否模拟发布（未真实推送到平台）。
+   * 凭证缺失/平台未接入通道时降级为模拟回执，状态仍为 Published 保持链路可跑，
+   * 但须在数据层面与真实回执区分，避免对账/回收看板把模拟数据当真实经营结果。
+   */
+  @Column({ type: 'tinyint', width: 1, default: 0 })
+  simulated!: number;
+
+  /** 降级为模拟发布的原因（便于运维排查为何未真实推送） */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  simulatedReason?: string | null;
 }

@@ -28,6 +28,7 @@ import { AAModule } from './modules/aa/aa.module';
 import { MModule } from './modules/m/m.module';
 import { GModule } from './modules/g/g.module';
 import { HModule } from './modules/h/h.module';
+import { HumanAdjustmentModule } from './modules/human-adjustment/human-adjustment.module';
 import { VModule } from './modules/v/v.module';
 import { XModule } from './modules/x/x.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
@@ -41,6 +42,8 @@ import { EmployeeModule } from './modules/employee/employee.module';
 import { SystemModule } from './modules/system/system.module';
 import { DemoModule } from './modules/system/demo.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
+import { EcommerceModule } from './modules/ecommerce/ecommerce.module';
+import { BrowserModule } from './modules/browser/browser.module';
 
 /**
  * 应用根模块。
@@ -79,6 +82,7 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
     MModule,
     GModule,
     HModule,
+    HumanAdjustmentModule,
     VModule,
     XModule,
     ComplianceModule,
@@ -92,6 +96,8 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
     SystemModule,
     DemoModule,
     SystemConfigModule,
+    EcommerceModule,
+    BrowserModule,
   ],
 })
 export class AppModule {}

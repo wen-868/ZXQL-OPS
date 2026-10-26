@@ -13,6 +13,7 @@ import { AccountEntity } from '../account/account.entity';
 import { VideoEntity } from '../h/video.entity';
 import { AccountIdentity, AccountStage, AccountStatus, Platform } from '../account/account.types';
 import { TenantContext } from '../../tenant/tenant-context';
+import { encryptSecret } from '../../shared/crypto';
 import { CreatePublishDto } from './dto/create-publish.dto';
 import { BatchPublishDto } from './dto/batch-publish.dto';
 import { DouyinClientService } from '../../integration/douyin-client.service';
@@ -49,26 +50,28 @@ type ScriptPartial = Omit<Partial<ScriptEntity>, 'status' | 'complianceRisk'> & 
   complianceRisk?: ComplianceRisk | null;
 };
 function makePublishableScript(partial: ScriptPartial = {}): ScriptEntity {
+  // 默认值对象 + partial 展开覆盖（替代逐字段 ??，复杂度 21 → 1）
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? TENANT,
-    topicId: partial.topicId ?? 1,
-    attributionId: partial.attributionId ?? 'attr_t1_content_abc',
-    title: partial.title ?? '脚本A',
-    content: partial.content ?? '内容',
-    hook: partial.hook ?? '钩子',
-    hookEmotion: partial.hookEmotion ?? '好奇',
-    spokenTrack: partial.spokenTrack ?? [],
-    subtitleTrack: partial.subtitleTrack ?? [],
-    templateId: partial.templateId ?? null,
-    version: partial.version ?? 1,
-    parentVersionId: partial.parentVersionId ?? null,
-    status: partial.status ?? ScriptStatus.Approved,
-    complianceRisk: partial.complianceRisk ?? complianceRisk('none'),
-    promptVersion: partial.promptVersion ?? 'v1',
-    modelUsed: partial.modelUsed ?? 'ollama/llama3',
-    createdAt: partial.createdAt ?? new Date('2025-01-01T00:00:00Z'),
-    updatedAt: partial.updatedAt ?? new Date('2025-01-01T00:00:00Z'),
+    id: 1,
+    tenantId: TENANT,
+    topicId: 1,
+    attributionId: 'attr_t1_content_abc',
+    title: '脚本A',
+    content: '内容',
+    hook: '钩子',
+    hookEmotion: '好奇',
+    spokenTrack: [],
+    subtitleTrack: [],
+    templateId: null,
+    version: 1,
+    parentVersionId: null,
+    status: ScriptStatus.Approved,
+    complianceRisk: complianceRisk('none'),
+    promptVersion: 'v1',
+    modelUsed: 'ollama/llama3',
+    createdAt: new Date('2025-01-01T00:00:00Z'),
+    updatedAt: new Date('2025-01-01T00:00:00Z'),
+    ...partial,
   } as ScriptEntity;
 }
 
@@ -82,42 +85,44 @@ function makeAccount(
   } = {},
 ): AccountEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? TENANT,
-    platform: partial.platform ?? 'douyin',
-    platformAccountId: partial.platformAccountId ?? 'pd_1',
-    nickname: partial.nickname ?? '账号1',
-    identity: partial.identity ?? 'matrix',
-    stage: partial.stage ?? 'nurturing',
-    status: partial.status ?? 'normal',
-    fansCount: partial.fansCount ?? 0,
-    followCount: partial.followCount ?? 0,
-    likeCount: partial.likeCount ?? 0,
-    createdAt: partial.createdAt ?? new Date('2025-01-01T00:00:00Z'),
-    updatedAt: partial.updatedAt ?? new Date('2025-01-01T00:00:00Z'),
+    id: 1,
+    tenantId: TENANT,
+    platform: 'douyin',
+    platformAccountId: 'pd_1',
+    nickname: '账号1',
+    identity: 'matrix',
+    stage: 'nurturing',
+    status: 'normal',
+    fansCount: 0,
+    followCount: 0,
+    likeCount: 0,
+    createdAt: new Date('2025-01-01T00:00:00Z'),
+    updatedAt: new Date('2025-01-01T00:00:00Z'),
+    ...partial,
   } as AccountEntity;
 }
 
 // —— 测试辅助：发布任务（已 published）——
 function makePublishedTask(partial: Partial<PublishTaskEntity> = {}): PublishTaskEntity {
   return {
-    id: partial.id ?? 100,
-    tenantId: partial.tenantId ?? TENANT,
-    scriptId: partial.scriptId ?? 1,
-    accountId: partial.accountId ?? 1,
-    platform: partial.platform ?? 'douyin',
-    attributionId: partial.attributionId ?? 'attr_t1_content_abc',
-    videoId: partial.videoId ?? null,
-    scheduledAt: partial.scheduledAt ?? null,
-    status: partial.status ?? PublishStatus.Published,
-    retryCount: partial.retryCount ?? 0,
-    extPostId: partial.extPostId ?? `pub_${TENANT}_1_1`,
-    cartProductId: partial.cartProductId ?? null,
-    cartClicks: partial.cartClicks ?? 0,
-    orderConv: partial.orderConv ?? 0,
-    publishedAt: partial.publishedAt ?? new Date('2025-01-01T00:00:00Z'),
-    createdAt: partial.createdAt ?? new Date('2025-01-01T00:00:00Z'),
-    updatedAt: partial.updatedAt ?? new Date('2025-01-01T00:00:00Z'),
+    id: 100,
+    tenantId: TENANT,
+    scriptId: 1,
+    accountId: 1,
+    platform: 'douyin',
+    attributionId: 'attr_t1_content_abc',
+    videoId: null,
+    scheduledAt: null,
+    status: PublishStatus.Published,
+    retryCount: 0,
+    extPostId: `pub_${TENANT}_1_1`,
+    cartProductId: null,
+    cartClicks: 0,
+    orderConv: 0,
+    publishedAt: new Date('2025-01-01T00:00:00Z'),
+    createdAt: new Date('2025-01-01T00:00:00Z'),
+    updatedAt: new Date('2025-01-01T00:00:00Z'),
+    ...partial,
   } as PublishTaskEntity;
 }
 
@@ -211,6 +216,89 @@ describe('PublishService', () => {
         extPostId: `pub_${TENANT}_2_1`,
       });
       expect(createdCalls[1][0].publishedAt).toBeInstanceOf(Date);
+    });
+
+    /**
+     * 降级模拟发布必须落 simulated 标记：
+     * 凭证未配置时状态仍为 Published（链路可跑），但数据层面须可区分真实回执，
+     * 避免对账/回收看板把模拟数据当真实经营结果。
+     */
+    it('抖音凭证未配置 → 降级模拟发布，任务 meta 落 simulated=true + 原因', async () => {
+      const script = makePublishableScript({ id: 1, attributionId: 'attr_t1_content_abc' });
+      const acc = makeAccount({ id: 1, platform: 'douyin' });
+
+      mockPublishRepo.findOne.mockResolvedValueOnce(null);
+      mockScriptRepo.findOne.mockResolvedValueOnce(script);
+      mockAccountRepo.findOne.mockResolvedValueOnce(acc);
+      mockPublishRepo.save.mockResolvedValueOnce({ id: 20 } as PublishTaskEntity);
+
+      await TenantContext.run({ traceId: 't1', tenantId: TENANT }, () =>
+        svc.publish({ scriptId: 1, accountIds: [1] }),
+      );
+
+      const created = mockPublishRepo.create.mock.calls[0][0];
+      expect(created.status).toBe(PublishStatus.Published); // 链路仍可跑
+      expect(created.simulated).toBe(1);
+      expect(created.simulatedReason).toContain('凭证未配置');
+    });
+
+    it('非抖音平台 → 降级模拟发布并标记未接入通道', async () => {
+      const script = makePublishableScript({ id: 1, attributionId: 'attr_x' });
+      const acc = makeAccount({ id: 1, platform: 'kuaishou' });
+
+      mockPublishRepo.findOne.mockResolvedValueOnce(null);
+      mockScriptRepo.findOne.mockResolvedValueOnce(script);
+      mockAccountRepo.findOne.mockResolvedValueOnce(acc);
+      mockPublishRepo.save.mockResolvedValueOnce({ id: 21 } as PublishTaskEntity);
+
+      await TenantContext.run({ traceId: 't1', tenantId: TENANT }, () =>
+        svc.publish({ scriptId: 1, accountIds: [1] }),
+      );
+
+      const created = mockPublishRepo.create.mock.calls[0][0];
+      expect(created.simulated).toBe(1);
+      expect(created.simulatedReason).toContain('未接入');
+    });
+
+    it('真实发布成功 → extPostId 为真实回执且 meta 不落 simulated', async () => {
+      // 构造「凭证已配置 + 发布成功」的服务实例
+      const realSvc = new PublishService(
+        mockPublishRepo as unknown as Repository<PublishTaskEntity>,
+        mockScriptRepo as unknown as Repository<ScriptEntity>,
+        mockAccountRepo as unknown as Repository<AccountEntity>,
+        mockVideoRepo as unknown as Repository<VideoEntity>,
+        {
+          isConfigured: () => true,
+          publishVideo: jest.fn().mockResolvedValue({ itemId: 'ITEM-1', videoId: 'V1' }),
+        } as unknown as DouyinClientService,
+      );
+
+      const script = makePublishableScript({ id: 1, attributionId: 'attr_real' });
+      // 携带真实密文 token 与 platformOpenId，走真实 API 分支
+      const acc = {
+        ...makeAccount({ id: 1, platform: 'douyin' }),
+        tokenEnc: encryptSecret('real-access-token'),
+        platformOpenId: 'open-1',
+      } as AccountEntity;
+
+      mockPublishRepo.findOne.mockResolvedValueOnce(null);
+      mockScriptRepo.findOne.mockResolvedValueOnce(script);
+      mockAccountRepo.findOne.mockResolvedValueOnce(acc);
+      mockVideoRepo.findOne.mockResolvedValueOnce({
+        id: 5,
+        meta: { localPath: 'D:/v.mp4' },
+      } as unknown as VideoEntity);
+      mockPublishRepo.save.mockResolvedValueOnce({ id: 22 } as PublishTaskEntity);
+
+      await TenantContext.run({ traceId: 't1', tenantId: TENANT }, () =>
+        realSvc.publish({ scriptId: 1, accountIds: [1], videoId: 5 }),
+      );
+
+      const created = mockPublishRepo.create.mock.calls[0][0];
+      // 真实通道：extPostId 为 dy_ 前缀，不落 simulated 标记
+      expect(created.extPostId).toBe('dy_ITEM-1');
+      expect(created.simulated).toBe(0);
+      expect(created.simulatedReason).toBeNull();
     });
   });
 
@@ -432,6 +520,18 @@ describe('PublishService', () => {
       const script = makePublishableScript({ id: 1, tenantId: T2, attributionId: 'attr_t2_x' });
       const acc = makeAccount({ id: 1, tenantId: T2, platform: 'douyin' });
 
+      /** 取 findOne 调用中首个命中谓词的条件 tenantId（断言去重：收敛四处重复 ?. 链） */
+      const tenantIdOf = (
+        calls: unknown[][],
+        pred: (w: NonNullable<FindOneCall['where']>) => boolean,
+      ): string | undefined => {
+        for (const [arg] of calls) {
+          const w = (arg as FindOneCall | undefined)?.where;
+          if (w && pred(w)) return w.tenantId;
+        }
+        return undefined;
+      };
+
       // publish（T2）：幂等 → script → account
       mockPublishRepo.findOne.mockResolvedValueOnce(null);
       mockScriptRepo.findOne.mockResolvedValueOnce(script);
@@ -442,36 +542,18 @@ describe('PublishService', () => {
         svc.publish({ scriptId: 1, accountIds: [1] }),
       );
 
-      // 校验 scriptRepo.findOne 的 where.tenantId
-      const scriptCall = mockScriptRepo.findOne.mock.calls.find((c) => {
-        const w = (c[0] as FindOneCall | undefined)?.where;
-        return w?.id === 1;
-      });
-      expect((scriptCall?.[0] as FindOneCall | undefined)?.where?.tenantId).toBe(T2);
-
-      // 校验 accountRepo.findOne 的 where.tenantId
-      const accCall = mockAccountRepo.findOne.mock.calls.find((c) => {
-        const w = (c[0] as FindOneCall | undefined)?.where;
-        return w?.id === 1;
-      });
-      expect((accCall?.[0] as FindOneCall | undefined)?.where?.tenantId).toBe(T2);
-
-      // 校验幂等查询的 where.tenantId
-      const idemCall = mockPublishRepo.findOne.mock.calls.find((c) => {
-        const w = (c[0] as FindOneCall | undefined)?.where;
-        return w?.status === PublishStatus.Published;
-      });
-      expect((idemCall?.[0] as FindOneCall | undefined)?.where?.tenantId).toBe(T2);
+      // script / account / 幂等 三类查询均按 T2 隔离
+      expect(tenantIdOf(mockScriptRepo.findOne.mock.calls, (w) => w.id === 1)).toBe(T2);
+      expect(tenantIdOf(mockAccountRepo.findOne.mock.calls, (w) => w.id === 1)).toBe(T2);
+      expect(
+        tenantIdOf(mockPublishRepo.findOne.mock.calls, (w) => w.status === PublishStatus.Published),
+      ).toBe(T2);
 
       // getPublish（T2）：where.tenantId 正确
       const task = makePublishedTask({ id: 30, tenantId: T2 });
       mockPublishRepo.findOne.mockResolvedValueOnce(task);
       await TenantContext.run({ traceId: 't11b', tenantId: T2 }, () => svc.getPublish(30));
-      const getCall = mockPublishRepo.findOne.mock.calls.find((c) => {
-        const w = (c[0] as FindOneCall | undefined)?.where;
-        return w?.id === 30;
-      });
-      expect((getCall?.[0] as FindOneCall | undefined)?.where?.tenantId).toBe(T2);
+      expect(tenantIdOf(mockPublishRepo.findOne.mock.calls, (w) => w.id === 30)).toBe(T2);
     });
   });
 
@@ -481,5 +563,40 @@ describe('PublishService', () => {
       const dto: CreatePublishDto = { scriptId: 1, accountIds: [1] };
       await expect(svc.publish(dto)).rejects.toMatchObject({ code: 'TENANT_REQUIRED' });
     });
+  });
+
+  it('createTask Douyin 发布 API 报错：抛 PUBLISH_DOUYIN_API_ERROR', async () => {
+    const script = makePublishableScript({ id: 1 });
+    // 凭证齐全（token + openId）才会走真实 API 分支
+    const acc = {
+      ...makeAccount({ id: 1, platform: 'douyin' }),
+      tokenEnc: encryptSecret('token-x'),
+      platformOpenId: 'open-1',
+    } as AccountEntity;
+    mockPublishRepo.findOne.mockResolvedValueOnce(null); // 幂等
+    mockScriptRepo.findOne.mockResolvedValueOnce(script);
+    mockAccountRepo.findOne.mockResolvedValueOnce(acc);
+    // 指定 videoId 并命中本地路径，才能走到真实发布分支
+    mockVideoRepo.findOne.mockResolvedValueOnce({
+      id: 5,
+      meta: { localPath: 'D:/videos/a.mp4' },
+    } as unknown as VideoEntity);
+
+    const rejectingClient = {
+      isConfigured: () => true,
+      publishVideo: jest.fn().mockRejectedValueOnce(new Error('API error')),
+    } as unknown as DouyinClientService;
+    const local = new PublishService(
+      mockPublishRepo as unknown as Repository<PublishTaskEntity>,
+      mockScriptRepo as unknown as Repository<ScriptEntity>,
+      mockAccountRepo as unknown as Repository<AccountEntity>,
+      mockVideoRepo as unknown as Repository<VideoEntity>,
+      rejectingClient,
+    );
+
+    const dto: CreatePublishDto = { scriptId: 1, accountIds: [1], videoId: 5 };
+    await expect(
+      TenantContext.run({ traceId: 'tdy', tenantId: TENANT }, () => local.publish(dto)),
+    ).rejects.toMatchObject({ code: 'PUBLISH_DOUYIN_API_ERROR' });
   });
 });

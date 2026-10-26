@@ -38,6 +38,7 @@ export class VerifyTrafficStrategy implements OpsStrategy {
       ratedTopics: tasks.length,
       feedbacks: tasks.length,
       strategy: this.meta.key,
+      skipped: (ctx.publishTaskIds ?? []).length === 0,
     };
   }
 }
@@ -68,6 +69,7 @@ export class VerifyInteractionStrategy implements OpsStrategy {
       ratedTopics: tasks.length,
       feedbacks: tasks.length,
       strategy: this.meta.key,
+      skipped: (ctx.publishTaskIds ?? []).length === 0,
     };
   }
 }
@@ -98,6 +100,7 @@ export class VerifyConversionStrategy implements OpsStrategy {
       ratedTopics: tasks.length,
       feedbacks: tasks.length,
       strategy: this.meta.key,
+      skipped: (ctx.publishTaskIds ?? []).length === 0,
     };
   }
 }
@@ -128,6 +131,7 @@ export class VerifySentimentStrategy implements OpsStrategy {
       ratedTopics: tasks.length,
       feedbacks: tasks.length,
       strategy: this.meta.key,
+      skipped: (ctx.publishTaskIds ?? []).length === 0,
     };
   }
 }
@@ -158,6 +162,7 @@ export class VerifyCompositeStrategy implements OpsStrategy {
       ratedTopics: tasks.length,
       feedbacks: tasks.length,
       strategy: this.meta.key,
+      skipped: (ctx.publishTaskIds ?? []).length === 0,
     };
   }
 }

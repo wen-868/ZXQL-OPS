@@ -5,6 +5,8 @@ import { IntegrationService } from './integration.service';
 import { env } from '../config/env';
 import { AppError } from '../shared/app-error';
 import { Public } from '../auth/public.decorator';
+import { CsrfExempt } from '../auth/csrf-exempt.decorator';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 /** Nest 开启 rawBody 后挂载的原始请求字节（Express 类型未内置） */
 type RawBodyRequest = Request & { rawBody?: Buffer };
@@ -17,6 +19,8 @@ type RawBodyRequest = Request & { rawBody?: Buffer };
  * - standalone 模式仅确认收到（占位），connected 模式接入后做真实双向同步。
  */
 @Public()
+@CsrfExempt() // 回调自带 X-Core-Signature HMAC 签名校验，豁免 CSRF 令牌
+@ApiTags('callbacks')
 @Controller('integration/callbacks')
 export class CallbackController {
   constructor(private readonly svc: IntegrationService) {}
@@ -44,24 +48,28 @@ export class CallbackController {
   }
 
   @Post('order-settled')
+  @ApiOperation({ summary: 'POST orderSettled' })
   orderSettled(@Req() req: RawBodyRequest, @Body() body: Record<string, unknown>) {
     this.verifySignature(req);
     return { event: 'order-settled', received: true, mode: this.svc.mode, payload: body };
   }
 
   @Post('stock-updated')
+  @ApiOperation({ summary: 'POST stockUpdated' })
   stockUpdated(@Req() req: RawBodyRequest, @Body() body: Record<string, unknown>) {
     this.verifySignature(req);
     return { event: 'stock-updated', received: true, mode: this.svc.mode, payload: body };
   }
 
   @Post('tenant-updated')
+  @ApiOperation({ summary: 'POST tenantUpdated' })
   tenantUpdated(@Req() req: RawBodyRequest, @Body() body: Record<string, unknown>) {
     this.verifySignature(req);
     return { event: 'tenant-updated', received: true, mode: this.svc.mode, payload: body };
   }
 
   @Post('financial-updated')
+  @ApiOperation({ summary: 'POST financialUpdated' })
   financialUpdated(@Req() req: RawBodyRequest, @Body() body: Record<string, unknown>) {
     this.verifySignature(req);
     return { event: 'financial-updated', received: true, mode: this.svc.mode, payload: body };

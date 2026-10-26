@@ -28,6 +28,8 @@ describe('attribution_id 全局归因标识', () => {
 
   it('三种 type 均合法', () => {
     for (const t of ['content', 'live', 'ad'] as AttributionType[]) {
+      // t 来自上方固定枚举数组，测试专用，无 ReDoS 面
+      // eslint-disable-next-line security/detect-non-literal-regexp
       expect(generateAttributionId('t', t, 's')).toMatch(new RegExp(`^attr_t_${t}_[0-9a-f]{32}$`));
     }
   });

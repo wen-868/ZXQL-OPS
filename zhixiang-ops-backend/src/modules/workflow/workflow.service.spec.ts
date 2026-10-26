@@ -34,20 +34,60 @@ import { PaginationQueryDto } from '../../shared/pagination';
 const TENANT = 'tn-1';
 const TENANT_OTHER = 'tn-other';
 
-// —— 测试辅助：编排定义实体 ——
+// —— 测试辅助：编排定义实体（默认值 + 展开覆盖）——
 function makeDef(partial: Partial<WorkflowDefEntity> = {}): WorkflowDefEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? TENANT,
-    name: partial.name ?? '编排A',
-    nodes: partial.nodes ?? [],
-    edges: partial.edges ?? [],
-    trigger: partial.trigger ?? 'manual',
-    cronExpr: partial.cronExpr ?? null,
-    enabled: partial.enabled ?? true,
-    createdAt: partial.createdAt ?? new Date('2025-01-01T00:00:00Z'),
-    updatedAt: partial.updatedAt ?? new Date('2025-01-01T00:00:00Z'),
+    id: 1,
+    tenantId: TENANT,
+    name: '编排A',
+    nodes: [],
+    edges: [],
+    trigger: 'manual',
+    cronExpr: null,
+    enabled: true,
+    createdAt: new Date('2025-01-01T00:00:00Z'),
+    updatedAt: new Date('2025-01-01T00:00:00Z'),
+    ...partial,
   } as WorkflowDefEntity;
+}
+
+/** 跳过 ideate 时的节点链：collect→analyze→script→publish */
+function skipIdeateTail(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  opts: { scriptId?: number; accountIds?: number[]; platform?: string },
+): void {
+  nodes.push({
+    id: 'c',
+    type: 'script',
+    config: opts.scriptId ? { topicId: opts.scriptId } : {},
+  });
+  edges.push({ from: 'c', to: 'd' });
+  nodes.push({
+    id: 'd',
+    type: 'publish',
+    config: {
+      accountIds: opts.accountIds ?? [1],
+      platform: opts.platform ?? 'douyin',
+      ...(opts.scriptId ? { scriptId: opts.scriptId } : {}),
+    },
+  });
+}
+
+/** 默认节点链：collect→analyze→ideate→script→publish */
+function fullTail(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  opts: { ideateDriver?: string; accountIds?: number[]; platform?: string },
+): void {
+  nodes.push({ id: 'c', type: 'ideate', config: { driver: opts.ideateDriver ?? '贪' } });
+  nodes.push({ id: 'd', type: 'script' });
+  nodes.push({
+    id: 'e',
+    type: 'publish',
+    config: { accountIds: opts.accountIds ?? [1], platform: opts.platform ?? 'douyin' },
+  });
+  edges.push({ from: 'c', to: 'd' }, { from: 'd', to: 'e' });
 }
 
 // —— 测试辅助：线性编排（C→D→E→F→I）——
@@ -70,31 +110,9 @@ function linearDef(
     { from: 'b', to: 'c' },
   ];
   if (opts.skipIdeate) {
-    // collect → analyze → script 直接连边（无 ideate）
-    nodes.push({
-      id: 'c',
-      type: 'script',
-      config: opts.scriptId ? { topicId: opts.scriptId } : {},
-    });
-    edges.push({ from: 'c', to: 'd' });
-    nodes.push({
-      id: 'd',
-      type: 'publish',
-      config: {
-        accountIds: opts.accountIds ?? [1],
-        platform: opts.platform ?? 'douyin',
-        ...(opts.scriptId ? { scriptId: opts.scriptId } : {}),
-      },
-    });
+    skipIdeateTail(nodes, edges, opts);
   } else {
-    nodes.push({ id: 'c', type: 'ideate', config: { driver: opts.ideateDriver ?? '贪' } });
-    nodes.push({ id: 'd', type: 'script' });
-    nodes.push({
-      id: 'e',
-      type: 'publish',
-      config: { accountIds: opts.accountIds ?? [1], platform: opts.platform ?? 'douyin' },
-    });
-    edges.push({ from: 'c', to: 'd' }, { from: 'd', to: 'e' });
+    fullTail(nodes, edges, opts);
   }
   return makeDef({ id: 1, nodes, edges });
 }

@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 
 import { IntelModule } from '../intel/intel.module';
 import { AnalyzeModule } from '../analyze/analyze.module';
@@ -41,7 +40,7 @@ export { VIDEO_STRATEGY_TOKEN } from './video-automation.constants';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // 注：ScheduleModule.forRoot() 已在 AppModule 全局注册一次，此处不再重复注册
     IntelModule,
     AnalyzeModule,
     TopicModule,

@@ -67,6 +67,28 @@ describe('SkillGateway', () => {
     expect(ollama.generate).toHaveBeenCalledTimes(1);
   });
 
+  it('超时类失败（TimeoutError）自动重试一次后成功', async () => {
+    const timeoutErr = new Error('The operation was aborted due to timeout');
+    timeoutErr.name = 'TimeoutError';
+    gatewayProvider.generate.mockRejectedValueOnce(timeoutErr);
+    const payload: SkillInvokePayload = { skill: 'text-generate', prompt: 'hi' };
+    const r = await gateway.invoke(payload);
+    expect(r.content).toBe('external-result');
+    expect(gatewayProvider.generate).toHaveBeenCalledTimes(2);
+    expect(ollama.generate).not.toHaveBeenCalled();
+  });
+
+  it('超时重试仍失败后降级下一个 Provider', async () => {
+    const timeoutErr = new Error('aborted');
+    timeoutErr.name = 'TimeoutError';
+    gatewayProvider.generate.mockRejectedValue(timeoutErr);
+    const payload: SkillInvokePayload = { skill: 'text-generate', prompt: 'hi' };
+    const r = await gateway.invoke(payload);
+    expect(r.content).toBe('local-ollama-result');
+    expect(gatewayProvider.generate).toHaveBeenCalledTimes(2);
+    expect(ollama.generate).toHaveBeenCalledTimes(1);
+  });
+
   it('所有 Provider 失败时抛出 SKILL_UNAVAILABLE', async () => {
     gatewayProvider.generate.mockRejectedValue(new Error('e1'));
     ollama.generate.mockRejectedValue(new Error('e2'));

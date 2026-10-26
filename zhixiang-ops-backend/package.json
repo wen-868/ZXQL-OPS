@@ -9,12 +9,14 @@
     "prebuild": "node -e \"['tsconfig.build.tsbuildinfo','tsconfig.tsbuildinfo'].forEach(f=>{try{require('fs').unlinkSync(f)}catch(e){}})\"",
     "build": "nest build",
     "postbuild": "node scripts/copy-db-assets.mjs",
+    "mysql:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-embedded-mysql.ps1",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:cov": "jest --coverage"
@@ -25,6 +27,7 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/schedule": "^5.0.0",
+    "@nestjs/swagger": "^11.4.7",
     "@nestjs/typeorm": "^11.0.0",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
@@ -35,10 +38,16 @@
     "multer": "^2.2.0",
     "mysql2": "^3.11.0",
     "pino": "^9.5.0",
+    "playwright": "^1.63.0",
+    "playwright-core": "^1.63.0",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "typeorm": "^0.3.20",
-    "uuid": "^9.0.1"
+    "uuid": "^11.1.1",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
@@ -52,11 +61,14 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^20.14.0",
     "@types/uuid": "^9.0.8",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
+    "eslint-plugin-security": "^4.0.1",
     "globals": "^17.0.0",
     "jest": "^29.7.0",
+    "jscpd": "^4.3.0",
     "pino-pretty": "^13.0.0",
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",
@@ -85,6 +97,14 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
+    "coverageThreshold": {
+      "global": {
+        "statements": 70,
+        "branches": 65,
+        "functions": 60,
+        "lines": 70
+      }
+    },
     "testEnvironment": "node"
   }
 }

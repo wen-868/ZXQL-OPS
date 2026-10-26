@@ -16,6 +16,8 @@ for (const dir of ['migrations', 'seeds']) {
   const srcDir = path.join(srcDb, dir);
   const dstDir = path.join(dstDb, dir);
   if (!fs.existsSync(srcDir)) continue;
+  // 先清空目标目录：删除已归档/改名/删除的脚本，避免旧迁移残留被误执行
+  fs.rmSync(dstDir, { recursive: true, force: true });
   fs.mkdirSync(dstDir, { recursive: true });
   let count = 0;
   for (const f of fs.readdirSync(srcDir)) {

@@ -14,6 +14,26 @@ export type LlmGatewayType = 'ollama' | 'openai' | 'zhipu';
 /** 客户「大模型配置」可选类型（与 ops_llm_providers.type 对齐） */
 export type LlmCallType = 'ollama' | 'openai' | 'azure' | 'custom' | 'zhipu';
 
+/** 外部 LLM 调用超时（防挂死；超时抛 TimeoutError，由 SkillGateway 重试/降级） */
+export const LLM_CALL_TIMEOUT_MS = 60_000;
+
+/** 取数值型参数：非 number 一律回退默认值（params 为外部传入，不做类型假设） */
+export function numOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' ? value : fallback;
+}
+
+/** 取非空字符串参数：非 string 或空串一律回退默认值 */
+export function nonEmptyStrOr(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value ? value : fallback;
+}
+
+/** 网关类型 → 统一端点调用类型（网关仅三态，映射封闭无缺省分支） */
+const LLM_CALL_TYPE: Record<LlmGatewayType, LlmCallType> = {
+  ollama: 'ollama',
+  openai: 'openai',
+  zhipu: 'zhipu',
+};
+
 /** 统一的 LLM 端点调用（供外部网关与租户自建 Provider 复用） */
 export async function callLlmEndpoint(opts: {
   baseUrl: string;
@@ -101,6 +121,7 @@ async function callOllama(
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LLM_CALL_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new Error(`Ollama HTTP ${res.status}: ${await res.text().catch(() => '')}`);
@@ -112,6 +133,30 @@ async function callOllama(
       `Ollama 调用失败 (${Date.now() - started}ms): ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+/** Bearer 鉴权头（无 key 时返回空对象，便于展开） */
+function authHeaders(apiKey?: string): Record<string, string> {
+  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+}
+
+/** 取 chat 响应首条 message（结构防御性访问，任一缺失返回 undefined） */
+function firstChatMessage(
+  json: unknown,
+): { content?: string; reasoning_content?: string } | undefined {
+  const choices = (
+    json as { choices?: Array<{ message?: { content?: string; reasoning_content?: string } }> }
+  )?.choices;
+  return choices?.[0]?.message;
+}
+
+/**
+ * 从 chat 响应提取正文：优先 message.content；
+ * 推理模型可能只把 token 花在 reasoning_content 上，故 content 为空时回退它。
+ */
+function extractChatContent(json: unknown): string {
+  const msg = firstChatMessage(json);
+  return msg?.content?.trim() || msg?.reasoning_content?.trim() || '';
 }
 
 async function chatCompatible(
@@ -135,20 +180,15 @@ async function chatCompatible(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...authHeaders(apiKey),
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LLM_CALL_TIMEOUT_MS),
     });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => '')}`);
     }
-    const json = (await res.json()) as {
-      choices?: { message?: { content?: string; reasoning_content?: string } }[];
-    };
-    const msg = json.choices?.[0]?.message ?? {};
-    // 部分推理模型会把 token 消耗在 reasoning_content 上，content 可能为空，
-    // 此时回退到 reasoning_content 作为兜底内容，避免前端拿到空串。
-    const content = msg.content?.trim() || msg.reasoning_content?.trim() || '';
+    const content = extractChatContent(await res.json());
     return { content, modelUsed: model, source: 'external' };
   } catch (err) {
     throw new Error(
@@ -214,16 +254,16 @@ export class GatewayProvider implements SkillProvider {
       throw new AppError('SKILL_UNSUPPORTED', `Gateway Provider 不支持技能: ${payload.skill}`);
     }
     const params = payload.params ?? {};
-    const temperature = typeof params.temperature === 'number' ? params.temperature : 0.8;
+    const temperature = numOr(params.temperature, 0.8);
     // 推理模型需要更多 token 预算（思维链占用），默认提升到 2048
-    const maxTokens = typeof params.maxTokens === 'number' ? params.maxTokens : 2048;
-
-    const type: LlmCallType =
-      this.runtimeType === 'zhipu' ? 'zhipu' : this.runtimeType === 'openai' ? 'openai' : 'ollama';
+    const maxTokens = numOr(params.maxTokens, 2048);
+    const type = LLM_CALL_TYPE[this.runtimeType];
+    // params.model 显式覆盖默认模型（调用方须自行做白名单/成本控制）
+    const model = nonEmptyStrOr(params.model, this.runtimeModel);
     return callLlmEndpoint({
       baseUrl: this.runtimeBase,
       apiKey: this.runtimeApiKey,
-      model: this.runtimeModel,
+      model,
       type,
       prompt: payload.prompt,
       temperature,

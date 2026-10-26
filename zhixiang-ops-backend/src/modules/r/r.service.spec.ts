@@ -283,6 +283,28 @@ describe('ProductService', () => {
       );
       expect(result.content?.raw).toBe('AI文本');
     });
+
+    it('LLM Provider 不可用 → 逐字段回落规则模板落库（不抛错，环节不缺失）', async () => {
+      mockProductRepo.findOne.mockResolvedValueOnce({
+        id: 1,
+        tenantId: 'tn-1',
+        title: '测试商品',
+        stock: 0,
+      } as unknown as ProductEntity);
+      mockContentRepo.findOne.mockResolvedValueOnce(null);
+      mockSkill.generateText.mockRejectedValue(new Error('所有 Provider 均不可用'));
+
+      const result = await TenantContext.run({ traceId: 'r11', tenantId: 'tn-1' }, () =>
+        svc.generateContent(1, { platform: 'douyin' }),
+      );
+      expect(result.titleAi).toContain('测试商品');
+      expect(result.sellingPoint).toContain('精选品质');
+      expect(result.script).toContain('宝子们');
+      expect(result.xhsCopy).toContain('闭眼入');
+      expect(Array.isArray(result.content?.sections)).toBe(true);
+      expect(result.version).toBe(1);
+      expect(mockSkill.generateText).toHaveBeenCalledTimes(5);
+    });
   });
 
   // —— 验收点 3：checkCompliance 合规校验（P 内嵌兜底） ——

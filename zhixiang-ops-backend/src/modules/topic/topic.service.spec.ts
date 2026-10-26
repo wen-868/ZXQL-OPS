@@ -1,4 +1,4 @@
-﻿import { TopicService } from './topic.service';
+import { TopicService } from './topic.service';
 import { TenantContext } from '../../tenant/tenant-context';
 import { TopicEntity } from './topic.entity';
 import { TopicStatus } from './topic.types';
@@ -33,22 +33,19 @@ function buildQueryBuilder() {
 }
 
 function makeTopic(partial: Partial<TopicEntity> = {}): TopicEntity {
+  // 默认值 + 展开覆盖（替代逐字段 ??）
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? 'tn-1',
-    attributionId: partial.attributionId ?? 'attr_tn-1_content_' + 'a'.repeat(32),
-    title: partial.title ?? '默认标题',
-    humanDriver: partial.humanDriver ?? '贪',
-    emotion: partial.emotion ?? '好奇',
-    formulaTags: partial.formulaTags,
-    status: partial.status ?? TopicStatus.Idea,
-    score: partial.score ?? 0,
-    analysisId: partial.analysisId,
-    abVariantOf: partial.abVariantOf,
-    scheduledAt: partial.scheduledAt,
-    accountId: partial.accountId,
-    promptVersion: partial.promptVersion ?? 'v1',
-    modelUsed: partial.modelUsed ?? '',
+    id: 1,
+    tenantId: 'tn-1',
+    attributionId: 'attr_tn-1_content_' + 'a'.repeat(32),
+    title: '默认标题',
+    humanDriver: '贪',
+    emotion: '好奇',
+    status: TopicStatus.Idea,
+    score: 0,
+    promptVersion: 'v1',
+    modelUsed: '',
+    ...partial,
   } as TopicEntity;
 }
 
@@ -529,16 +526,16 @@ describe('TopicService', () => {
 // —— 辅助：构造 AccountEntity（为隔离引用 account.entity 仅在需要时）——
 function makeAccount(partial: Partial<AccountEntity> = {}): AccountEntity {
   return {
-    id: partial.id ?? 1,
-    tenantId: partial.tenantId ?? 'tn-1',
-    platform: partial.platform ?? ('douyin' as any),
-    platformAccountId: partial.platformAccountId ?? 'pa-1',
-    nickname: partial.nickname,
-    identity: partial.identity ?? ('matrix' as any),
-    stage: partial.stage ?? ('nurturing' as any),
-    status: partial.status ?? ('unsigned' as any),
-    fansCount: partial.fansCount ?? 0,
-    followCount: partial.followCount ?? 0,
-    likeCount: partial.likeCount ?? 0,
+    id: 1,
+    tenantId: 'tn-1',
+    platform: 'douyin',
+    platformAccountId: 'pa-1',
+    identity: 'matrix',
+    stage: 'nurturing',
+    status: 'unsigned',
+    fansCount: 0,
+    followCount: 0,
+    likeCount: 0,
+    ...partial,
   } as AccountEntity;
 }

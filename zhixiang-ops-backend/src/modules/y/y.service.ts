@@ -17,7 +17,13 @@ import {
   InventoryWarnItem,
   BuyerView,
 } from './y.types';
-import { SyncOrdersDto, CreateWaybillDto, BatchWaybillDto, SyncInventoryDto } from './dto';
+import {
+  SyncOrdersDto,
+  SyncOrderItemDto,
+  CreateWaybillDto,
+  BatchWaybillDto,
+  SyncInventoryDto,
+} from './dto';
 
 /** 扣减库存的订单状态（已支付/发货/完成） */
 const STOCK_DEDUCT_STATUSES: OrderStatus[] = ['paid', 'shipped', 'completed'];
@@ -113,35 +119,9 @@ export class OrderService {
     let created = 0;
     let updated = 0;
     for (const item of dto.orders) {
-      const existing = await this.orderRepo.findOne({ where: { tenantId, orderId: item.orderId } });
-      const buyerEnc = item.buyer ? encryptJSON(item.buyer) : null;
-      const status = item.status ?? 'paid';
-      if (existing) {
-        if (existing.status !== status) {
-          existing.status = status;
-          await this.orderRepo.save(existing);
-          updated++;
-        }
-        continue;
-      }
-      const e = this.orderRepo.create({
-        tenantId,
-        source,
-        platform: item.platform,
-        orderId: item.orderId,
-        productId: item.productId ?? null,
-        quantity: item.quantity ?? 1,
-        amount: item.amount,
-        commission: item.commission ?? 0,
-        status,
-        attributionId: item.attributionId ?? null,
-        buyerInfo: buyerEnc,
-      });
-      if (STOCK_DEDUCT_STATUSES.includes(status) && e.productId) {
-        await this.product.updateStock(e.productId, { delta: -(e.quantity ?? 1) });
-      }
-      await this.orderRepo.save(e);
-      created++;
+      const outcome = await this.upsertOrder(tenantId, source, item);
+      if (outcome === 'created') created++;
+      else if (outcome === 'updated') updated++;
     }
     await this.audit.record({
       action: 'sync_orders',
@@ -149,6 +129,62 @@ export class OrderService {
       resource: `orders:${tenantId}`,
     });
     return { total: dto.orders.length, created, updated };
+  }
+
+  /**
+   * 单条订单幂等 upsert：已存在走状态同步，不存在走创建 + 库存联动。
+   */
+  private async upsertOrder(
+    tenantId: string,
+    source: 'management' | 'platform',
+    item: SyncOrderItemDto,
+  ): Promise<'created' | 'updated' | 'skipped'> {
+    const existing = await this.orderRepo.findOne({ where: { tenantId, orderId: item.orderId } });
+    if (existing) return this.syncExistingOrder(existing, item);
+    await this.createSyncedOrder(tenantId, source, item);
+    return 'created';
+  }
+
+  /** 已存在订单：状态未变跳过；变化仅同步状态（买家信息不回填，与幂等语义一致） */
+  private async syncExistingOrder(
+    existing: OrderEntity,
+    item: SyncOrderItemDto,
+  ): Promise<'updated' | 'skipped'> {
+    const status = item.status ?? 'paid';
+    if (existing.status === status) return 'skipped';
+    existing.status = status;
+    await this.orderRepo.save(existing);
+    return 'updated';
+  }
+
+  /** 新订单字段默认值归一（?? 集中于此，保证 createSyncedOrder 低复杂度） */
+  private static toOrderFields(
+    item: SyncOrderItemDto,
+  ): Partial<OrderEntity> & { status: OrderStatus; quantity: number } {
+    return {
+      platform: item.platform,
+      orderId: item.orderId,
+      productId: item.productId ?? null,
+      quantity: item.quantity ?? 1,
+      amount: item.amount,
+      commission: item.commission ?? 0,
+      status: item.status ?? 'paid',
+      attributionId: item.attributionId ?? null,
+      buyerInfo: item.buyer ? encryptJSON(item.buyer) : null,
+    };
+  }
+
+  /** 创建同步订单：落库前按状态联动扣减 R 库存（防超卖以应用层顺序写兜底） */
+  private async createSyncedOrder(
+    tenantId: string,
+    source: 'management' | 'platform',
+    item: SyncOrderItemDto,
+  ): Promise<void> {
+    const e = this.orderRepo.create({ tenantId, source, ...OrderService.toOrderFields(item) });
+    if (STOCK_DEDUCT_STATUSES.includes(e.status) && e.productId) {
+      await this.product.updateStock(e.productId, { delta: -e.quantity });
+    }
+    await this.orderRepo.save(e);
   }
 
   async listOrders(filter: { status?: string; platform?: string } = {}): Promise<OrderView[]> {

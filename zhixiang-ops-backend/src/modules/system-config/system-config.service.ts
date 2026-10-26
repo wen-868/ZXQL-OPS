@@ -56,22 +56,61 @@ export class SystemConfigService {
     return def.sensitive && row.valueEnc ? decryptSecret(row.valueEnc) : (row.valueText ?? '');
   }
 
+  /**
+   * 对外展示用读取：敏感键只返回掩码，不泄露明文。
+   * HTTP 接口（GET /system-configs/:key）应走本方法，避免凭据经响应体外泄。
+   */
+  async getMasked(key: string): Promise<string> {
+    SystemConfigService.assertKey(key);
+    const def = CONFIG_KEY_DEFS[key];
+    if (def.sensitive) {
+      const row = await this.repo.findOne({ where: { key } });
+      return row?.valueEnc ? MASK : '';
+    }
+    return this.get(key);
+  }
+
+  /** 已有行赋值：敏感值加密存 valueEnc，非敏感存明文 valueText */
+  private static writeRow(row: SystemConfigEntity, sensitive: boolean, value: string): void {
+    if (sensitive) {
+      row.valueEnc = value ? encryptSecret(value) : null;
+      row.valueText = null;
+    } else {
+      row.valueText = value || null;
+      row.valueEnc = null;
+    }
+    row.isSensitive = sensitive;
+  }
+
+  /** 新行构造（value 为空串时敏感/非敏感字段均落 undefined/null） */
+  private buildNewRow(key: string, sensitive: boolean, value: string): Partial<SystemConfigEntity> {
+    return this.repo.create({
+      key,
+      isSensitive: sensitive,
+      valueEnc: sensitive && value ? encryptSecret(value) : undefined,
+      valueText: !sensitive ? value || null : undefined,
+    } as Partial<SystemConfigEntity>);
+  }
+
   /** 批量读取（避免 N 次查询） */
   async getMany(keys: string[]): Promise<Record<string, string>> {
     const rows = await this.repo.find({ where: keys.map((k) => ({ key: k })) });
     const map = new Map(rows.map((r) => [r.key, r]));
     const out: Record<string, string> = {};
     for (const key of keys) {
-      const def = CONFIG_KEY_DEFS[key];
-      const row = map.get(key);
-      if (!row) {
-        out[key] = def?.fallback ?? '';
-        continue;
-      }
-      out[key] =
-        def?.sensitive && row.valueEnc ? decryptSecret(row.valueEnc) : (row.valueText ?? '');
+      out[key] = SystemConfigService.resolveValue(CONFIG_KEY_DEFS[key], map.get(key));
     }
     return out;
+  }
+
+  /** 单键取值：无行返回 fallback（未知键回落空串），敏感行解密 valueEnc */
+  private static resolveValue(
+    def: { sensitive: boolean; fallback?: string } | undefined,
+    row: SystemConfigEntity | undefined,
+  ): string {
+    if (!row) return def?.fallback ?? '';
+    if (def?.sensitive && row.valueEnc) return decryptSecret(row.valueEnc);
+    return row.valueText ?? '';
   }
 
   /** 写入配置（敏感值加密存储；传空字符串视为清除该配置） */
@@ -81,24 +120,10 @@ export class SystemConfigService {
     const normalized = value.trim();
     const existing = await this.repo.findOne({ where: { key } });
     if (existing) {
-      if (def.sensitive) {
-        existing.valueEnc = normalized ? encryptSecret(normalized) : null;
-        existing.valueText = null;
-      } else {
-        existing.valueText = normalized || null;
-        existing.valueEnc = null;
-      }
-      existing.isSensitive = def.sensitive;
+      SystemConfigService.writeRow(existing, def.sensitive, normalized);
       await this.repo.save(existing);
     } else {
-      await this.repo.save(
-        this.repo.create({
-          key,
-          isSensitive: def.sensitive,
-          valueEnc: def.sensitive && normalized ? encryptSecret(normalized) : undefined,
-          valueText: !def.sensitive ? normalized || null : undefined,
-        } as Partial<SystemConfigEntity>),
-      );
+      await this.repo.save(this.buildNewRow(key, def.sensitive, normalized));
     }
     this.logger.log(`系统配置已更新: ${key}${normalized ? '' : '（已清除）'}`);
     return this.toView(key, normalized);

@@ -65,7 +65,10 @@ export interface OpsStageResult {
   scriptIds?: number[];
   publishTaskIds?: number[];
   recycleTaskIds?: number[];
+  analysisTaskIds?: number[];
   strategy?: string;
+  /** 前置依赖缺失（无账号/无输入）导致的跳过标记，避免"空跑成功"误判 */
+  skipped?: boolean;
 }
 
 /** 统一策略接口：每个阶段策略都接受上下文 + 配置，返回标准化结果 */
@@ -112,10 +115,12 @@ export interface PublishUpResult {
 export interface DeliverResult {
   publishTaskIds: number[];
   channels: string[];
+  skipped?: boolean;
 }
 export interface VerifyResult {
   recycleTaskIds: number[];
   ratedTopics: number;
   feedbacks: number;
   strategy: string;
+  skipped?: boolean;
 }

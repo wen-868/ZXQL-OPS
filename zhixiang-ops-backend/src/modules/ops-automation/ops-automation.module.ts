@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
 
 import { IntelModule } from '../intel/intel.module';
 import { AnalyzeModule } from '../analyze/analyze.module';
@@ -35,7 +34,7 @@ export { OPS_STRATEGY_TOKEN } from './ops-automation.constants';
 
 @Module({
   imports: [
-    ScheduleModule.forRoot(),
+    // 注：ScheduleModule.forRoot() 已在 AppModule 全局注册一次，此处不再重复注册
     IntelModule,
     AnalyzeModule,
     TopicModule,
