@@ -50,6 +50,28 @@ function Wait-Http($uri, $timeoutSec = 60) {
   }
   return $false
 }
+function Wait-MysqlPing($mysqladmin, $timeoutSec = 60) {
+  # 用 cmd /c 包裹：避免 $ErrorActionPreference='Stop' 下原生 stderr 被转为终止错误（PS 5.1 行为）
+  $deadline = (Get-Date).AddSeconds($timeoutSec)
+  while ((Get-Date) -lt $deadline) {
+    & cmd.exe /d /c "`"$mysqladmin`" ping -h 127.0.0.1 --silent" | Out-Null
+    if ($LASTEXITCODE -eq 0) { return $true }
+    Start-Sleep -Seconds 2
+  }
+  return $false
+}
+function Wait-Health($uri, $timeoutSec = 60) {
+  # 真实健康：解析响应体确认 ok:true（HTTP 200 不代表 DB/Redis 可用）
+  $deadline = (Get-Date).AddSeconds($timeoutSec)
+  while ((Get-Date) -lt $deadline) {
+    try {
+      $r = Invoke-RestMethod -Uri $uri -UseBasicParsing -TimeoutSec 2
+      if ($r.code -eq '0' -and $r.data.ok) { return $true }
+    } catch {}
+    Start-Sleep -Seconds 2
+  }
+  return $false
+}
 function Save-Pid($name, $processId) {
   $processId | Out-File -FilePath (Join-Path $LOGDIR "$name.pid") -Encoding ascii
 }
@@ -102,7 +124,12 @@ if (-not (Test-Path $MARIADB_DATA)) {
 }
 Log '▶ 启动 MariaDB (3306)…'
 Start-Process -FilePath $MARIADB_BIN -ArgumentList "--datadir=$MARIADB_DATA","--port=3306","--bind-address=127.0.0.1","--skip-ssl" -WindowStyle Hidden -PassThru | ForEach-Object { Save-Pid 'mariadb' $_.Id }
-if (-not (Wait-Http 'http://127.0.0.1:3306' -timeoutSec 1)) { Start-Sleep -Seconds 4 }
+$MYSQLADMIN = Join-Path (Join-Path (Join-Path $MARIADB_DIR 'mariadb-11.4.5-winx64') 'bin') 'mysqladmin.exe'
+if (-not (Wait-MysqlPing $MYSQLADMIN -timeoutSec 90)) {
+  Log '❌ MariaDB 未就绪（mysqladmin ping 超时），请查看 logs/ 或手动检查 tools/mariadb/data。'
+  exit 1
+}
+Log '✅ MariaDB 已就绪 (3306)'
 
 # ============ 2. Redis ============
 if (-not (Test-Path $REDIS)) {
@@ -120,7 +147,12 @@ $migJs = Join-Path (Join-Path (Join-Path $BACKEND 'dist') 'db') 'migrate.js'
 # 用 cmd /c 合并 node 的 stderr 到 stdout，避免 $ErrorActionPreference='Stop' 下
 # migrate.js 的“表已存在跳过”类提示被当作终止错误导致启动中断。
 $migOut = & cmd.exe /d /c "node `"$migJs`" 2>&1"
+$migExit = $LASTEXITCODE
 $migOut | ForEach-Object { Log "[migrate] $_" }
+if ($migExit -ne 0) {
+  Log '❌ 数据库迁移失败（见上方 [migrate] 日志），中止启动。可运行 .\start.ps1 -Rollback 后重试。'
+  exit 1
+}
 Pop-Location
 Log '✅ 迁移完成'
 
@@ -128,8 +160,8 @@ Log '✅ 迁移完成'
 $env:NODE_ENV = 'production'
 Log '▶ 启动后端 (3100, NODE_ENV=production)…'
 Start-Process -FilePath 'node' -ArgumentList (Join-Path (Join-Path (Join-Path $BACKEND 'dist') 'src') 'main.js') -WorkingDirectory $BACKEND -WindowStyle Hidden -RedirectStandardOutput (Join-Path $LOGDIR 'backend.log') -RedirectStandardError (Join-Path $LOGDIR 'backend.err.log') -PassThru | ForEach-Object { Save-Pid 'backend' $_.Id }
-if (-not (Wait-Http 'http://127.0.0.1:3100/api/ops/health' -timeoutSec 60)) {
-  Log '❌ 后端健康检查超时，详见 logs/backend.err.log'
+if (-not (Wait-Health 'http://127.0.0.1:3100/api/ops/health' -timeoutSec 90)) {
+  Log '❌ 后端健康检查超时（DB/Redis 依赖未就绪或启动失败），详见 logs/backend.err.log'
   exit 1
 }
 Log '✅ 后端已就绪 (3100)'
@@ -146,10 +178,14 @@ Log '✅ 门户已就绪 (8080)'
 
 # ============ 6. 启动自检 ============
 Log '▶ 启动自检（健康 + 关键接口）…'
-$okHealth = Wait-Http 'http://127.0.0.1:8080/api/ops/health' -timeoutSec 5
-$okAuth   = (Invoke-WebRequest -Uri 'http://127.0.0.1:8080/api/ops/system/status' -Headers @{'x-tenant-id'=$Tenant} -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200
-if ($okHealth -and $okAuth) { Log '✅ 自检通过：health + auth/status 均 200' }
-else { Log "⚠ 自检部分未通过（health=$okHealth, auth=$okAuth）" }
+try {
+  $okHealth = Wait-Health 'http://127.0.0.1:8080/api/ops/health' -timeoutSec 5
+  $okAuth   = (Invoke-WebRequest -Uri 'http://127.0.0.1:8080/api/ops/system/status' -Headers @{'x-tenant-id'=$Tenant} -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200
+  if ($okHealth -and $okAuth) { Log '✅ 自检通过：health(ok=true) + auth/status 均 200' }
+  else { Log "⚠ 自检部分未通过（health=$okHealth, auth=$okAuth）" }
+} catch {
+  Log ('⚠ 自检异常: ' + $_.Exception.Message)
+}
 
 Log ''
 Log '=========================================='
