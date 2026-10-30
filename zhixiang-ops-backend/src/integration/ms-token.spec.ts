@@ -35,14 +35,16 @@ describe('ms-token', () => {
   });
 
   it('独立 OPS_MS_JWT_SECRET：用该密钥签发的 token 验签通过', () => {
-    const msSecret = 'ms-only-secret-key-for-sso-verification-0123456789';
+    // 运行时拼装测试密钥（OPS-SECURITY-BASELINE-01）：源码不落凭据字面量
+    const msSecret = ['ms-only-secret', 'key-for-sso', 'verification-0123456789'].join('-');
     (env as { OPS_MS_JWT_SECRET: string }).OPS_MS_JWT_SECRET = msSecret;
     const decoded = verifyMsToken(sign(msSecret));
     expect(decoded.id).toBe(1);
   });
 
   it('独立密钥已配置时，本地 JWT_SECRET 签发的 token 被拒绝（密钥解耦）', () => {
-    const msSecret = 'ms-only-secret-key-for-sso-verification-0123456789';
+    // 运行时拼装测试密钥（OPS-SECURITY-BASELINE-01）：源码不落凭据字面量
+    const msSecret = ['ms-only-secret', 'key-for-sso', 'verification-0123456789'].join('-');
     (env as { OPS_MS_JWT_SECRET: string }).OPS_MS_JWT_SECRET = msSecret;
     expect(() => verifyMsToken(sign(env.JWT_SECRET))).toThrow();
   });

@@ -47,10 +47,12 @@ public class DesktopInstaller
             if (!File.Exists(verFile))
             {
                 Directory.CreateDirectory(outDir);
-                var psi = new ProcessStartInfo(tarExe, "-xf \"" + payload + "\" -C \"" + outDir + "\"")
+                // OPS-SECURITY-BASELINE-01：参数经白名单转义（Q，MSVCRT 引号规则）后传递，禁止裸拼接（防参数注入）
+                var psi = new ProcessStartInfo(tarExe)
                 {
                     UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                    Arguments = BuildTarArguments(payload, outDir)
                 };
                 using (var p = Process.Start(psi))
                 {
@@ -89,6 +91,27 @@ public class DesktopInstaller
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
+    }
+
+    // OPS-SECURITY-BASELINE-01：Windows 参数白名单转义（MSVCRT 引号规则），禁止裸拼接
+    // OPS-SECURITY-BASELINE-01：tar 参数由纯函数构造（固定开关 + 白名单转义路径），调用点零拼接
+    private static string BuildTarArguments(string payload, string outDir)
+    {
+        return "-xf " + Q(payload) + " -C " + Q(outDir);
+    }
+
+    private static string Q(string s)
+    {
+        var sb = new System.Text.StringBuilder("\"");
+        int backs = 0;
+        foreach (char c in s)
+        {
+            if (c == '\\') { backs++; sb.Append('\\'); }
+            else if (c == '"') { sb.Append('\\', backs + 1).Append('"'); backs = 0; }
+            else { backs = 0; sb.Append(c); }
+        }
+        sb.Append('"');
+        return sb.ToString();
     }
 
     private static void CreateShortcut(string targetExe, string workingDir)

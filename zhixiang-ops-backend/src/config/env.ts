@@ -156,7 +156,7 @@ export const env = {
   demoMode: optional('OPS_DEMO_MODE', 'false') === 'true',
   demoTenant: optional('OPS_DEMO_TENANT', 't_demo'),
   demoUsername: optional('OPS_DEMO_USERNAME', 'demo'),
-  demoPassword: optional('OPS_DEMO_PASSWORD', 'Demo@123456'),
+  demoPassword: optional('OPS_DEMO_PASSWORD', ''),
 };
 
 export type AppEnv = typeof env;

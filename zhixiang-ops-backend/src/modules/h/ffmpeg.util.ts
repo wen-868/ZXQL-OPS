@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess, execSync } from 'child_process';
+import { spawn, type ChildProcess, execSync, execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 
 export interface FfmpegResult {
@@ -27,8 +27,9 @@ function ffmpegPathFromEnv(): string | null {
 /** 2) 系统 PATH 查找（which/where） */
 function ffmpegPathFromPath(): string | null {
   try {
-    const cmd = process.platform === 'win32' ? 'where ffmpeg' : 'which ffmpeg';
-    const out = execSync(cmd, { encoding: 'utf-8', timeout: 3000 }).trim();
+    // OPS-SECURITY-BASELINE-01：execFileSync 数组参数（不经 shell），命令与参数均为程序内常量
+    const exe = process.platform === 'win32' ? 'where.exe' : 'which';
+    const out = execFileSync(exe, ['ffmpeg'], { encoding: 'utf-8', timeout: 3000, shell: false }).trim();
     return out ? out.split('\n')[0].trim() : null;
   } catch {
     /* not in PATH */

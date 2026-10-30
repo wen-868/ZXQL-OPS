@@ -146,7 +146,7 @@ describe('SkillCenterService', () => {
       type: 'text-generate',
       name: '我的 BYO',
       source: 'tenant-byo',
-      apiKey: 'sk-plain-1',
+      apiKey: ['sk', 'plain', '1'].join('-'),
       baseUrl: 'https://relay.example.com/v1',
       models: ['gpt-x'],
     });

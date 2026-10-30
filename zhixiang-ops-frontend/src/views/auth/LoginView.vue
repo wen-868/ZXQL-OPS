@@ -18,7 +18,7 @@ const status = ref<SystemStatus | null>(null)
 
 const form = reactive({
   username: 'demo',
-  password: 'Demo@123456',
+  password: '',
   realName: '',
 })
 

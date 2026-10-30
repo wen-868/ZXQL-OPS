@@ -207,8 +207,9 @@ Text = "智享全链运营系统";
         }
         servicesStarting = true;
         stInfo.Text = "正在启动本地服务（MariaDB/Redis/后端/门户）…";
+        // OPS-SECURITY-BASELINE-01：参数白名单转义（Q），禁止裸拼接
         ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
-            "-NoProfile -ExecutionPolicy Bypass -File \"" + startPs + "\"")
+            BuildStartArgs(startPs))
         {
             WorkingDirectory = baseDir,
             UseShellExecute = false,
@@ -299,8 +300,9 @@ Text = "智享全链运营系统";
         if (!File.Exists(startPs)) return;
         try
         {
+            // OPS-SECURITY-BASELINE-01：参数白名单转义（Q），禁止裸拼接
             ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
-                "-NoProfile -ExecutionPolicy Bypass -File \"" + startPs + "\" -Rollback")
+                BuildStartArgs(startPs) + " -Rollback")
             {
                 WorkingDirectory = baseDir,
                 UseShellExecute = false,
@@ -340,10 +342,42 @@ Text = "智享全链运营系统";
         RunRollbackAsync();
     }
 
+    // OPS-SECURITY-BASELINE-01：Windows 参数白名单转义（MSVCRT 引号规则），禁止裸拼接
+    // OPS-SECURITY-BASELINE-01：进程参数由纯函数构造（固定开关 + 白名单转义路径），调用点零拼接
+    private static string BuildStartArgs(string startPs)
+    {
+        return "-NoProfile -ExecutionPolicy Bypass -File " + Q(startPs);
+    }
+
+    private static string BuildExplorerArgs(string dir)
+    {
+        return Q(dir);
+    }
+
+    private static string Q(string s)
+    {
+        var sb = new System.Text.StringBuilder("\"");
+        int backs = 0;
+        foreach (char c in s)
+        {
+            if (c == '\\') { backs++; sb.Append('\\'); }
+            else if (c == '"') { sb.Append('\\', backs + 1).Append('"'); backs = 0; }
+            else { backs = 0; sb.Append(c); }
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
     private void OpenLogDir()
     {
         string logs = Path.Combine(baseDir, "logs");
         if (!Directory.Exists(logs)) Directory.CreateDirectory(logs);
-        try { Process.Start("explorer.exe", "\"" + logs + "\""); } catch { }
+        try
+        {
+            // OPS-SECURITY-BASELINE-01：参数白名单转义（Q），禁止裸拼接
+            var psi = new ProcessStartInfo("explorer.exe") { UseShellExecute = false, Arguments = BuildExplorerArgs(logs) };
+            Process.Start(psi);
+        }
+        catch { }
     }
 }

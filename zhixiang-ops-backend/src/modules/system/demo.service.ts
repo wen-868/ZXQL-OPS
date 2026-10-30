@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { hash } from 'bcryptjs';
+import { AppError } from '../../shared/app-error';
 import { User } from '../../auth/user.entity';
 import { AccountEntity } from '../account/account.entity';
 import { TopicEntity } from '../topic/topic.entity';
@@ -60,6 +61,10 @@ export class DemoService implements OnModuleInit {
    * 已存在则重置为当前配置密码（避免历史随机密码无法登录）。
    */
   async ensureDemoUser(): Promise<User> {
+    // 安全初始化流程（OPS-SECURITY-BASELINE-01）：未显式配置 OPS_DEMO_PASSWORD 时跳过播种
+    if (!env.demoPassword) {
+      throw new AppError('DEMO_DISABLED', '演示模式未配置 OPS_DEMO_PASSWORD，演示登录不可用');
+    }
     const tenantId = this.demoTenant();
     const username = env.demoUsername;
     const password = await hash(env.demoPassword, 10);

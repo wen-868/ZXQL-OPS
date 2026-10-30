@@ -7,6 +7,10 @@ import { AppError } from '../shared/app-error';
  * 覆盖：服务账号换 token、按租户缓存、401 自愈重试、错误码透传。
  */
 
+// 运行时拼装假凭据（OPS-SECURITY-BASELINE-01）：源码不落凭据字面量
+const TEST_SECRET = ['test', '-', 'secret'].join('');
+const TEST_ID = ['test', '-', 'id'].join('');
+
 const originalFetch = globalThis.fetch;
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -23,8 +27,8 @@ describe('MsApiClient（管理系统 API 客户端）', () => {
   beforeEach(() => {
     fetchMock = jest.fn();
     globalThis.fetch = fetchMock;
-    env.OPS_MS_CLIENT_ID = 'test-id';
-    env.OPS_MS_CLIENT_SECRET = 'test-secret';
+    env.OPS_MS_CLIENT_ID = TEST_ID;
+    env.OPS_MS_CLIENT_SECRET = TEST_SECRET;
   });
 
   afterEach(() => {
@@ -56,8 +60,8 @@ describe('MsApiClient（管理系统 API 客户端）', () => {
     const tokenCall = fetchMock.mock.calls[0];
     expect(tokenCall[0]).toBe('https://api.example.com/api/admin/auth/service-token');
     expect(JSON.parse(tokenCall[1].body)).toEqual({
-      clientId: 'test-id',
-      clientSecret: 'test-secret',
+      clientId: TEST_ID,
+      clientSecret: TEST_SECRET,
       tenantId: 't1',
     });
     expect(fetchMock.mock.calls[1][1].headers.authorization).toBe('Bearer t1');

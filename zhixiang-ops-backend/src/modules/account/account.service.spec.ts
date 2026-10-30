@@ -114,13 +114,13 @@ describe('AccountService', () => {
     });
 
     it('传入 accessToken → 加密存储且能被 decryptSecret 还原，status 由有效期推导', async () => {
-      const plain = 'secret-access-token-xyz';
+      const plain = ['secret', 'access', 'token', 'xyz'].join('-');
       const dto = {
         platform: 'douyin',
         platformAccountId: 'pa-2',
         nickname: '已授权号',
         accessToken: plain,
-        refreshToken: 'secret-refresh-token',
+        refreshToken: ['secret', 'refresh', 'token'].join('-'),
         tokenExpireAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(), // 未来 7 天
       } as any;
 

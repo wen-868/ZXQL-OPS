@@ -12,6 +12,27 @@
 'use strict';
 
 const BASE = process.env.SMOKE_BASE || 'http://localhost:8080';
+
+// 出站限制（OPS-SECURITY-BASELINE-01）：协议白名单 http/https，主机仅回环/私网；
+// 确需指向远程目标时必须显式设置 SMOKE_ALLOW_REMOTE=true（防冒烟脚本被滥用为 SSRF 跳板）。
+function buildUrl(pathname) {
+  return new URL(pathname, BASE).toString();
+}
+
+(function guardOutbound() {
+  let u;
+  try { u = new URL(BASE); } catch { console.error('SMOKE_BASE 不是合法 URL: ' + BASE); process.exit(2); }
+  if (!/^https?:$/.test(u.protocol)) {
+    console.error('SMOKE_BASE 协议必须是 http/https: ' + BASE); process.exit(2);
+  }
+  const host = u.hostname;
+  const loopback = host === 'localhost' || host === '::1' || host === '[::1]' || /^127\.\d+\.\d+\.\d+$/.test(host);
+  const priv = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) || host.endsWith('.local');
+  if (!loopback && !priv && process.env.SMOKE_ALLOW_REMOTE !== 'true') {
+    console.error('SMOKE_BASE 主机必须为回环/私网（当前 ' + host + '）；远程目标请显式设置 SMOKE_ALLOW_REMOTE=true');
+    process.exit(2);
+  }
+})();
 const TENANT = process.argv[2] || 't_dev';
 const SMOKE_USER = process.env.SMOKE_USER || 'admin';
 const SMOKE_PASS = process.env.SMOKE_PASS || 'admin123';
@@ -34,7 +55,7 @@ async function callOne(ep, token) {
   try {
     const headers = { 'x-tenant-id': TENANT };
     if (token) headers['authorization'] = 'Bearer ' + token;
-    const res = await fetch(BASE + ep.path, { headers });
+    const res = await fetch(buildUrl(ep.path), { headers });
     const text = await res.text();
     const ms = Date.now() - t0;
     let json = null;
@@ -61,7 +82,7 @@ async function callOne(ep, token) {
   console.log('════════════════════════════════════════════════════════');
 
   // 代理探活
-  const proxyOk = await fetch(BASE + '/api/ops/health').then((r) => r.ok).catch(() => false);
+  const proxyOk = await fetch(buildUrl('/api/ops/health')).then((r) => r.ok).catch(() => false);
   if (!proxyOk) {
     console.log(' ❌ 看板代理不可达（8080）。请先运行 ops-trial.ps1 启动全栈。');
     process.exit(1);
@@ -70,7 +91,7 @@ async function callOne(ep, token) {
   // 登录获取 JWT（8/9 起全局鉴权，业务接口需带 token）
   let token = '';
   try {
-    const loginRes = await fetch(BASE + '/api/ops/auth/login', {
+    const loginRes = await fetch(buildUrl('/api/ops/auth/login'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-tenant-id': TENANT },
       body: JSON.stringify({ username: SMOKE_USER, password: SMOKE_PASS }),

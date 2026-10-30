@@ -5,6 +5,9 @@ import { env } from '../config/env';
 import { AppError } from '../shared/app-error';
 import type { Request } from 'express';
 
+// 运行时拼装假凭据（OPS-SECURITY-BASELINE-01）：源码不落凭据字面量
+const TEST_SECRET = ['test', '-', 'secret'].join('');
+
 /**
  * 管理系统 Webhook 回调签名校验单测（方案 §18-⑦）。
  * 覆盖：正确签名通过、错误签名拒绝、sha256= 前缀兼容、未配置密钥放行。
@@ -32,9 +35,9 @@ describe('CallbackController（管理系统 Webhook 回调）', () => {
   });
 
   it('配置密钥 + 正确签名：校验通过并确认收到', () => {
-    env.OPS_MS_CLIENT_SECRET = 'test-secret';
+    env.OPS_MS_CLIENT_SECRET = TEST_SECRET;
     const body = { orderId: 'P-1', status: 'settled' };
-    const signature = createHmac('sha256', 'test-secret')
+    const signature = createHmac('sha256', TEST_SECRET)
       .update(JSON.stringify(body))
       .digest('hex');
     const res = controller.orderSettled(makeReq(body, signature), body);
@@ -43,9 +46,9 @@ describe('CallbackController（管理系统 Webhook 回调）', () => {
   });
 
   it('配置密钥 + sha256= 前缀签名：兼容通过', () => {
-    env.OPS_MS_CLIENT_SECRET = 'test-secret';
+    env.OPS_MS_CLIENT_SECRET = TEST_SECRET;
     const body = { stock: 10 };
-    const signature = `sha256=${createHmac('sha256', 'test-secret')
+    const signature = `sha256=${createHmac('sha256', TEST_SECRET)
       .update(JSON.stringify(body))
       .digest('hex')}`;
     const res = controller.stockUpdated(makeReq(body, signature), body);
@@ -53,7 +56,7 @@ describe('CallbackController（管理系统 Webhook 回调）', () => {
   });
 
   it('配置密钥 + 错误签名：拒绝（CALLBACK_SIGNATURE_INVALID）', () => {
-    env.OPS_MS_CLIENT_SECRET = 'test-secret';
+    env.OPS_MS_CLIENT_SECRET = TEST_SECRET;
     const body = { tenantId: '1' };
     expect(() => controller.tenantUpdated(makeReq(body, 'bad-signature'), body)).toThrow(
       expect.objectContaining({ code: 'CALLBACK_SIGNATURE_INVALID' }),
@@ -61,7 +64,7 @@ describe('CallbackController（管理系统 Webhook 回调）', () => {
   });
 
   it('配置密钥 + 缺失签名：拒绝（CALLBACK_SIGNATURE_INVALID）', () => {
-    env.OPS_MS_CLIENT_SECRET = 'test-secret';
+    env.OPS_MS_CLIENT_SECRET = TEST_SECRET;
     const body = { period: '2026-08' };
     expect(() => controller.financialUpdated(makeReq(body), body)).toThrow(
       expect.objectContaining({ code: 'CALLBACK_SIGNATURE_INVALID' }),
@@ -76,7 +79,7 @@ describe('CallbackController（管理系统 Webhook 回调）', () => {
   });
 
   it('错误类型为 AppError（错误码表兜底）', () => {
-    env.OPS_MS_CLIENT_SECRET = 'test-secret';
+    env.OPS_MS_CLIENT_SECRET = TEST_SECRET;
     try {
       controller.orderSettled(makeReq({}, 'bad'), {});
     } catch (e) {

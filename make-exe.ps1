@@ -93,9 +93,11 @@ class SelfExtractor {
       Console.WriteLine("目标目录: " + outDir);
       Console.WriteLine("正在解压，请稍候（首次运行约需几分钟）...");
       Directory.CreateDirectory(outDir);
-      var psi = new ProcessStartInfo(tarExe, "-xf \"" + payload + "\" -C \"" + outDir + "\"") {
+      // OPS-SECURITY-BASELINE-01：参数经白名单转义（Q，MSVCRT 引号规则）后传递，禁止裸拼接（防参数注入）
+      var psi = new ProcessStartInfo(tarExe) {
         UseShellExecute = false, CreateNoWindow = true,
-        RedirectStandardOutput = true, RedirectStandardError = true
+        RedirectStandardOutput = true, RedirectStandardError = true,
+        Arguments = "-xf " + Q(payload) + " -C " + Q(outDir)
       };
       using (var p = Process.Start(psi)) {
         p.WaitForExit();
@@ -110,8 +112,9 @@ class SelfExtractor {
 
     string ps = Path.Combine(outDir, "start.ps1");
     if (File.Exists(ps)) {
-      var psi = new ProcessStartInfo("powershell.exe", "-ExecutionPolicy Bypass -File \"" + ps + "\"") {
-        WorkingDirectory = outDir, UseShellExecute = false, CreateNoWindow = true
+      var psi = new ProcessStartInfo("powershell.exe") {
+        WorkingDirectory = outDir, UseShellExecute = false, CreateNoWindow = true,
+        Arguments = "-ExecutionPolicy Bypass -File " + Q(ps)
       };
       try { Process.Start(psi); Console.WriteLine("已启动 start.ps1，服务正在初始化..."); }
       catch (Exception ex) { Console.WriteLine("启动失败: " + ex.Message); }

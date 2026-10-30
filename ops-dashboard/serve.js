@@ -128,7 +128,15 @@ const server = http.createServer((req, res) => {
 // —— 运营前端构建产物（SPA）——
   if (u.pathname === '/ops-app' || u.pathname.startsWith('/ops-app/')) {
     const rel = u.pathname.replace(/^\/ops-app/, '') || '/';
-    const filePath = path.join(OPS_APP, rel);
+    // OPS-SECURITY-BASELINE-01：防路径穿越——解码后规范化并强制留在 OPS_APP 根内
+    const safeRel = path.normalize(decodeURIComponent(rel)).replace(/^([.]{2}(\/|\|$))+/, '');
+    const filePath = path.join(OPS_APP, safeRel);
+    const rootAbs = path.resolve(OPS_APP);
+    if (filePath !== rootAbs && !filePath.startsWith(rootAbs + path.sep)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Forbidden');
+      return;
+    }
     serveStatic(res, [filePath], path.join(OPS_APP, 'index.html'), [path.resolve(OPS_APP)]);
     return;
   }
