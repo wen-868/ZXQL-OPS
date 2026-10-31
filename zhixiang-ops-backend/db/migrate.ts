@@ -14,6 +14,8 @@ import 'dotenv/config';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import mysql from 'mysql2/promise';
+// OPS-SECURITY-MIGRATE-WHITELIST-01：迁移文件名白名单纯策略（唯一正则出处 src/database/migration-file-policy.ts）
+import { filterAndSortMigrationNames } from '../src/database/migration-file-policy';
 
 async function createConnection(): Promise<mysql.Connection> {
   const conn = await mysql.createConnection({
@@ -32,7 +34,8 @@ async function createConnection(): Promise<mysql.Connection> {
 
 async function listMigrationFiles(): Promise<string[]> {
   const migrationsDir = path.resolve(__dirname, 'migrations');
-  return (await fs.readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort(); // 按文件名排序（001, 002, ...）
+  // OPS-SECURITY-MIGRATE-WHITELIST-01：白名单过滤 + 排序（纯策略见 src/database/migration-file-policy.ts）
+  return filterAndSortMigrationNames(await fs.readdir(migrationsDir));
 }
 
 /** 正向迁移：已应用（__migrations 追踪）自动跳过 */
