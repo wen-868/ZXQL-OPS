@@ -39,6 +39,12 @@ export class BrowserPool {
   };
   public options: PoolOptions;
   private idleTimer: NodeJS.Timeout | null = null;
+  private destroyed = false;
+
+  /** 池是否已销毁（销毁后定时器回调不再产生日志/动作，getInstance 不再分配） */
+  public get isDestroyed(): boolean {
+    return this.destroyed;
+  }
 
   constructor(options: PoolOptions) {
     this.options = {
@@ -62,6 +68,8 @@ export class BrowserPool {
    */
   // eslint-disable-next-line @typescript-eslint/require-await -- 保持异步签名以兼容调用方
   async getInstance(tenantId = 'system'): Promise<PoolInstance | null> {
+    // OPS-TEST-TEARDOWN-01：池已销毁后不再分配（防收尾后重建状态/产生日志）
+    if (this.destroyed) return null;
     // 优先获取同租户空闲实例（页面状态/Cookie 只在本租户实例内流转）
     for (const [, instance] of this.instances) {
       if (
@@ -137,6 +145,8 @@ export class BrowserPool {
   private startIdleCleanup(): void {
     // 每分钟清理一次空闲实例
     this.idleTimer = setInterval(() => {
+      // OPS-TEST-TEARDOWN-01：销毁后竞态保护——定时器先判池状态，不再产生日志或清理动作
+      if (this.destroyed) return;
       const now = Date.now();
       for (const [, instance] of this.instances) {
         // 如果实例已空闲超过保持时间，且页面已关闭，则销毁
@@ -156,8 +166,11 @@ export class BrowserPool {
 
   /**
    * 销毁池：清理定时器并关闭全部实例（模块卸载/测试收尾调用，防资源泄漏）。
+   * OPS-TEST-TEARDOWN-01：幂等——重复调用不抛错、不重复执行收尾、不重复写日志。
    */
   async destroy(): Promise<void> {
+    if (this.destroyed) return;
+    this.destroyed = true;
     if (this.idleTimer) {
       clearInterval(this.idleTimer);
       this.idleTimer = null;
