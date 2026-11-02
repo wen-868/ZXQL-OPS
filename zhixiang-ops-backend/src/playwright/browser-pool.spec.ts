@@ -266,7 +266,9 @@ describe('BrowserPool', () => {
       loggerSpy.mockClear();
       // 推进远超 cleanupIdleMs 的时间：若定时器未判 destroyed，将产生「销毁空闲实例」日志
       jest.advanceTimersByTime(500);
-      const afterTeardown = loggerSpy.mock.calls.filter((c) => String(c[0]).includes('Browser pool'));
+      const afterTeardown = loggerSpy.mock.calls.filter((c) =>
+        String(c[0]).includes('Browser pool'),
+      );
       expect(afterTeardown).toHaveLength(0);
     } finally {
       jest.useRealTimers();
@@ -286,7 +288,7 @@ describe('BrowserPool', () => {
       const closeGate = new Promise<void>((r) => {
         releaseClose = r;
       });
-      const closeSpy = jest.spyOn(inst, 'close').mockReturnValue(closeGate as unknown as Promise<void>);
+      const closeSpy = jest.spyOn(inst, 'close').mockReturnValue(closeGate);
       const d1 = pool.destroy(); // 第一击：置 destroyed → 进入 close 循环（悬挂）
       await pool.destroy(); // 第二击：幂等守卫应直接返回
       releaseClose();
@@ -320,7 +322,7 @@ describe('BrowserPool', () => {
       const closeGate = new Promise<void>((r) => {
         releaseClose = r;
       });
-      const closeSpy = jest.spyOn(inst, 'close').mockReturnValue(closeGate as unknown as Promise<void>);
+      const closeSpy = jest.spyOn(inst, 'close').mockReturnValue(closeGate);
       const destroying = pool.destroy(); // 同步段：置 destroyed + 清定时器 + 进入 close 循环
       loggerSpy.mockClear();
       jest.advanceTimersByTime(100); // close 悬挂期间推进定时器
