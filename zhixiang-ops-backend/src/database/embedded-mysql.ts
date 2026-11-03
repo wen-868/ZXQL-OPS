@@ -30,6 +30,8 @@ export interface EmbeddedMysqlConfig {
   home?: string;
   /** 显式指定数据目录 */
   dataDir?: string;
+  /** 就绪等待上限（毫秒，默认 90000）。测试可注入小值避免真实时钟自旋 */
+  readyTimeoutMs?: number;
   stopOnExit: boolean;
 }
 
@@ -321,15 +323,21 @@ async function waitReady(
   child: ChildProcess,
   errLog: string,
 ): Promise<void> {
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
+  // OPS-EMBEDDED-MYSQL-OOM-RESILIENCE-01：双上限——真实时钟 deadline + 探测次数硬上限
+  // （次数上限与时钟无关：即使测试把 sleep mock 成零延迟，循环也不会全速自旋耗尽堆内存）
+  const timeoutMs = cfg.readyTimeoutMs ?? 90_000;
+  const deadline = Date.now() + timeoutMs;
+  const maxProbes = Math.ceil(timeoutMs / 250) + 2;
+  let probes = 0;
+  while (Date.now() < deadline && probes < maxProbes) {
+    probes++;
     if (child.exitCode !== null && child.exitCode !== undefined) {
       throw new Error(`内嵌 mysqld 启动失败（exit=${child.exitCode}），请查看错误日志: ${errLog}`);
     }
     if (await deps.probeTcp(cfg.host, cfg.port, 1000)) return;
     await deps.sleep(500);
   }
-  throw new Error(`内嵌 mysqld 启动超时，请查看错误日志: ${errLog}`);
+  throw new Error(`内嵌 mysqld 启动超时（等待 ${timeoutMs}ms，探测 ${probes} 次），请查看错误日志: ${errLog}`);
 }
 
 /** 等待子进程退出（初始化步骤）；非 0 退出抛错（附错误日志尾部） */

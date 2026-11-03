@@ -232,8 +232,206 @@ describe('ensureEmbeddedMysql', () => {
   });
 
   it('就绪等待超时 → 抛错并提示错误日志', async () => {
+    // OPS-EMBEDDED-MYSQL-OOM-RESILIENCE-01：注入 readyTimeoutMs + sleep mock 零延迟时
+    // 实现的探测次数硬上限封顶循环（此前 90s 真实时钟 deadline 会全速自旋耗尽 4.1GB 堆）
     const { deps } = makeDeps({ probeTcp: jest.fn().mockResolvedValue(false) });
-    await expect(ensureEmbeddedMysql(baseCfg, deps)).rejects.toThrow('启动超时');
+    await expect(
+      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
+    ).rejects.toThrow('启动超时');
+  });
+
+  it('readyTimeoutMs 双上限：探测次数封顶（时钟无关），超时后不再无限自旋', async () => {
+    let probeCalls = 0;
+    const { deps } = makeDeps({
+      probeTcp: jest.fn().mockImplementation(async () => {
+        probeCalls++;
+        return false;
+      }),
+    });
+    await expect(
+      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
+    ).rejects.toThrow('启动超时');
+    // 封顶 = 每次 waitReady ceil(200/250)+2 = 2 次探测（与时钟无关的硬上限）；
+    // 首次 + 自愈重试共两轮 waitReady → 4 次（对照修复前：90s 全速自旋可达数十万次）
+    expect(probeCalls).toBeLessThanOrEqual(4);
+  });
+
+  // ===== OPS-EMBEDDED-MYSQL-OOM-RESILIENCE-01 资源生命周期契约（五条清理路径）=====
+
+  it('成功路径 stopOnExit=false：child detached+unref，stopEmbeddedMysql 不 kill（宿主退出不误杀）', async () => {
+    const spawnFn = jest.fn(() => {
+      const handlers: Record<string, Function> = {};
+      const child: any = {
+        once: (ev: string, fn: Function) => {
+          handlers[ev] = fn;
+          return child;
+        },
+        unref: jest.fn(),
+        kill: jest.fn(),
+      };
+      setTimeout(() => handlers['exit']?.(0), 0);
+      return child;
+    });
+    const probe = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const { deps } = makeDeps({ spawnFn, probeTcp: probe });
+    await ensureEmbeddedMysql({ ...baseCfg, stopOnExit: false }, deps);
+    const child = spawnFn.mock.results[0].value;
+    expect(child.unref).toHaveBeenCalled(); // 资源交还宿主
+    await stopEmbeddedMysql({ log: () => undefined } as never);
+    expect(child.kill).not.toHaveBeenCalled(); // 非托管模式不误杀
+  });
+
+  it('成功路径 stopOnExit=true：stopEmbeddedMysql 托管 kill，且幂等（第二次 no-op 不抛错）', async () => {
+    const spawnFn = jest.fn(() => {
+      const handlers: Record<string, Function> = {};
+      const child: any = {
+        once: (ev: string, fn: Function) => {
+          handlers[ev] = fn;
+          return child;
+        },
+        unref: jest.fn(),
+        kill: jest.fn(),
+      };
+      setTimeout(() => handlers['exit']?.(0), 0);
+      return child;
+    });
+    const probe = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const { deps } = makeDeps({ spawnFn, probeTcp: probe });
+    await ensureEmbeddedMysql({ ...baseCfg, stopOnExit: true }, deps);
+    const child = spawnFn.mock.results[0].value;
+    await stopEmbeddedMysql({ log: () => undefined } as never);
+    expect(child.kill).toHaveBeenCalledTimes(1);
+    await expect(stopEmbeddedMysql({ log: () => undefined } as never)).resolves.toBeUndefined();
+    expect(child.kill).toHaveBeenCalledTimes(1); // 幂等：第二次零新增
+  });
+
+  it('失败路径自愈清理：kill+removeDir+重初始化+启动就绪（错误路径不残留）', async () => {
+    // 场景：mysql 库存在（已初始化）但完成哨兵缺席（首启被中断残留）
+    //      → 首次启动失败（readyTimeoutMs 封顶超时）→ 自愈：kill + 清目录 + 重初始化 + 启动就绪
+    let spawnSeq = 0;
+    const spawnFn = jest.fn(() => {
+      spawnSeq += 1;
+      const handlers: Record<string, Function> = {};
+      const child: any = {
+        once: (ev: string, fn: Function) => {
+          handlers[ev] = fn;
+          return child;
+        },
+        unref: jest.fn(),
+        kill: jest.fn(),
+      };
+      if (spawnSeq === 2) {
+        setTimeout(() => handlers['exit']?.(0), 0); // 自愈重初始化成功
+      } // spawnSeq 1/3 为启动进程：不退出，由 probeTcp 判定（probe 恒 false → 两次超时）
+      return child;
+    });
+    const probe = jest.fn().mockResolvedValue(false);
+    const existsSync = ((pp: string) =>
+        pp.endsWith('mysqld.exe') || (pp.includes('mysql') && !pp.endsWith('.ops-initialized'))
+      ) as never; // 哨兵缺席
+    const { deps } = makeDeps({ spawnFn, probeTcp: probe, existsSync });
+    const t0 = Date.now();
+    await expect(
+      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
+    ).rejects.toThrow('启动超时');
+    const inst1 = (spawnFn.mock.calls[0] as unknown[])[1] as string[];
+    expect(inst1.some((a) => a === '--initialize-insecure')).toBe(false); // 首次为启动而非初始化
+    expect(deps.removeDir).toHaveBeenCalled(); // 错误路径清理执行（自愈）
+    expect(deps.mkdirSync).toHaveBeenCalled(); // 清理后重建目录
+    // 并发实例治理：旧启动实例必须被 kill（否则新旧 mysqld 并存翻倍）
+    const firstChild = spawnFn.mock.results[0].value as { kill: jest.Mock };
+    expect(firstChild.kill).toHaveBeenCalled();
+    expect(Date.now() - t0).toBeLessThan(5000); // 两轮均被封顶，无 90s 自旋
+  });
+
+  it('异常中断路径：spawn 触发 error → 拒绝且目录清理（初始化阶段无 child 可 kill）', async () => {
+    const spawnFn = jest.fn(() => {
+      const handlers: Record<string, Function> = {};
+      const child: any = {
+        once: (ev: string, fn: Function) => {
+          handlers[ev] = fn;
+          return child;
+        },
+        unref: jest.fn(),
+        kill: jest.fn(),
+      };
+      setTimeout(() => handlers['error']?.(new Error('spawn 崩溃')), 0);
+      return child;
+    });
+    const probe = jest.fn().mockResolvedValue(false);
+    // 完成哨兵缺席（首启被中断的残留）→ 启动失败后进入自愈清理
+    const existsSync = ((pp: string) => !pp.endsWith('.' + 'ops-initialized')) as never;
+    const { deps } = makeDeps({ spawnFn, probeTcp: probe, existsSync });
+    await expect(
+      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
+    ).rejects.toThrow();
+    expect(deps.removeDir).toHaveBeenCalled(); // 异常路径同样清理（初始化阶段无 child，以目录清理断言）
+  });
+
+  it('超时路径 readyTimeoutMs 双上限封顶（时钟无关，防自旋 OOM）', async () => {
+    let probeCalls = 0;
+    const { deps } = makeDeps({
+      probeTcp: jest.fn().mockImplementation(async () => {
+        probeCalls++;
+        return false;
+      }),
+    });
+    await expect(
+      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
+    ).rejects.toThrow('启动超时');
+    // 首次 + 自愈重试各一轮，每轮封顶 ceil(200/250)+2 = 2 次
+    expect(probeCalls).toBeLessThanOrEqual(4);
+  });
+
+  it('超时路径：readyTimeoutMs 生效使套件毫秒级完成（对照修复前 90s 自旋 OOM）', async () => {
+    const t0 = Date.now();
+    const { deps } = makeDeps({ probeTcp: jest.fn().mockResolvedValue(false) });
+    await expect(
+      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
+    ).rejects.toThrow('启动超时');
+    expect(Date.now() - t0).toBeLessThan(5000); // 修复前：90s 自旋
+  });
+
+  it('stopOnExit=false 时 stopEmbeddedMysql 为 no-op（托管门不放行）', async () => {
+    const spawnFn = jest.fn(() => {
+      const handlers: Record<string, Function> = {};
+      const child: any = {
+        once: (ev: string, fn: Function) => {
+          handlers[ev] = fn;
+          return child;
+        },
+        unref: jest.fn(),
+        kill: jest.fn(),
+      };
+      setTimeout(() => handlers['exit']?.(0), 0);
+      return child;
+    });
+    const probe = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const { deps } = makeDeps({ spawnFn, probeTcp: probe });
+    await ensureEmbeddedMysql({ ...baseCfg, stopOnExit: false }, deps);
+    await stopEmbeddedMysql({ log: () => undefined } as never);
+    const child = spawnFn.mock.results[0].value;
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it('资源生命周期契约：startMysqld 全程仅一次 spawn（无并发实例翻倍）', async () => {
+    const probe = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+    const spawnFn = jest.fn(() => {
+      const handlers: Record<string, Function> = {};
+      const child: any = {
+        once: (ev: string, fn: Function) => {
+          handlers[ev] = fn;
+          return child;
+        },
+        unref: jest.fn(),
+        kill: jest.fn(),
+      };
+      setTimeout(() => handlers['exit']?.(0), 0);
+      return child;
+    });
+    const { deps } = makeDeps({ spawnFn, probeTcp: probe });
+    await ensureEmbeddedMysql({ ...baseCfg, stopOnExit: false }, deps);
+    expect(spawnFn).toHaveBeenCalledTimes(1); // 无并发实例翻倍
   });
 
   describe('resolveMysqlHome', () => {
