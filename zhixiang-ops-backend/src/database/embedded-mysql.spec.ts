@@ -55,7 +55,7 @@ describe('ensureEmbeddedMysql', () => {
       probeTcp: probeTcp as never,
       createDatabase: createDatabase as never,
       syncRootAuth: syncRootAuth as never,
-      existsSync: existsSync as never,
+      existsSync: existsSync,
       mkdirSync: jest.fn() as never,
       readdirSync: jest.fn().mockReturnValue([]) as never,
       writeFileSync: jest.fn() as never,
@@ -63,8 +63,8 @@ describe('ensureEmbeddedMysql', () => {
       log: jest.fn() as never,
       sleep: jest.fn().mockResolvedValue(undefined) as never,
       ...over,
-    } as EmbeddedMysqlDeps;
-    return { deps, spawnFn: spawnFn as jest.Mock, syncRootAuth: syncRootAuth as jest.Mock, events };
+    };
+    return { deps, spawnFn: spawnFn, syncRootAuth: syncRootAuth as jest.Mock, events };
   }
 
   afterEach(async () => {
@@ -95,22 +95,22 @@ describe('ensureEmbeddedMysql', () => {
 
   it('远程 DB_HOST 且 mode=true → 报错', async () => {
     const { deps } = makeDeps();
-    await expect(ensureEmbeddedMysql({ ...baseCfg, host: '10.0.0.5', mode: 'true' }, deps)).rejects.toThrow(
-      '内嵌 MySQL 仅支持本地绑定',
-    );
+    await expect(
+      ensureEmbeddedMysql({ ...baseCfg, host: '10.0.0.5', mode: 'true' }, deps),
+    ).rejects.toThrow('内嵌 MySQL 仅支持本地绑定');
   });
 
   it('无二进制：auto 跳过、true 报错', async () => {
     const noBin = (p: string) => !p.includes('mysqld') && !p.includes('mysql-');
     const noHome = makeDeps({
-      existsSync: noBin as never,
+      existsSync: noBin,
       readdirSync: jest.fn().mockReturnValue([]) as never,
     });
     const r = await ensureEmbeddedMysql(baseCfg, noHome.deps);
     expect(r.started).toBe(false);
 
     const strict = makeDeps({
-      existsSync: noBin as never,
+      existsSync: noBin,
       readdirSync: jest.fn().mockReturnValue([]) as never,
     });
     await expect(ensureEmbeddedMysql({ ...baseCfg, mode: 'true' }, strict.deps)).rejects.toThrow(
@@ -141,16 +141,18 @@ describe('ensureEmbeddedMysql', () => {
     const probe = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
     const { deps, spawnFn } = makeDeps({
       probeTcp: probe,
-      existsSync: ((p: string) => {
+      existsSync: (p: string) => {
         if (p.endsWith('mysqld.exe')) return true;
         if (p.includes('mysql-data')) return false; // 未初始化
         return true;
-      }) as never,
+      },
     });
     const r = await ensureEmbeddedMysql(baseCfg, deps);
     expect(r.started).toBe(true);
     expect(spawnFn).toHaveBeenCalledTimes(2); // init + start
-    expect((spawnFn.mock.calls[0][1] as string[]).some((a) => a === '--initialize-insecure')).toBe(true);
+    expect((spawnFn.mock.calls[0][1] as string[]).some((a) => a === '--initialize-insecure')).toBe(
+      true,
+    );
   });
 
   it('有 mysql 库但无完成哨兵且启动失败 → 清空重建（自愈首启被中断）', async () => {
@@ -174,29 +176,29 @@ describe('ensureEmbeddedMysql', () => {
     const { deps } = makeDeps({
       spawnFn,
       probeTcp: probe,
-      existsSync: ((p: string) => {
+      existsSync: (p: string) => {
         if (p.endsWith('mysqld.exe')) return true;
         if (p.includes('mysql-data')) return p.endsWith('mysql'); // 有 mysql 库、无哨兵
         return true;
-      }) as never,
+      },
       readdirSync: jest.fn().mockReturnValue(['ibdata1', 'undo_001']) as never,
     });
     const r = await ensureEmbeddedMysql(baseCfg, deps);
     expect(r.started).toBe(true);
     expect(deps.removeDir).toHaveBeenCalled();
     expect(spawnFn).toHaveBeenCalledTimes(3); // 启动失败 → 重建初始化 → 再次启动
-    expect((spawnFn.mock.calls[1][1] as string[]).some((a) => a === '--initialize-insecure')).toBe(true);
+    expect(spawnFn.mock.calls[1][1].some((a) => a === '--initialize-insecure')).toBe(true);
   });
 
   it('有 mysql 库但无哨兵且启动成功 → 视为有效库，不清空', async () => {
     const probe = jest.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
     const { deps, spawnFn } = makeDeps({
       probeTcp: probe,
-      existsSync: ((p: string) => {
+      existsSync: (p: string) => {
         if (p.endsWith('mysqld.exe')) return true;
         if (p.includes('mysql-data')) return p.endsWith('mysql'); // 有库、无哨兵
         return true;
-      }) as never,
+      },
     });
     const r = await ensureEmbeddedMysql(baseCfg, deps);
     expect(r.started).toBe(true);
@@ -222,11 +224,11 @@ describe('ensureEmbeddedMysql', () => {
     const { deps } = makeDeps({
       spawnFn,
       probeTcp: probe,
-      existsSync: ((p: string) => {
+      existsSync: (p: string) => {
         if (p.endsWith('mysqld.exe')) return true;
         if (p.includes('mysql-data')) return false;
         return true;
-      }) as never,
+      },
     });
     await expect(ensureEmbeddedMysql(baseCfg, deps)).rejects.toThrow('mysqld 初始化失败');
   });
@@ -235,9 +237,9 @@ describe('ensureEmbeddedMysql', () => {
     // OPS-EMBEDDED-MYSQL-OOM-RESILIENCE-01：注入 readyTimeoutMs + sleep mock 零延迟时
     // 实现的探测次数硬上限封顶循环（此前 90s 真实时钟 deadline 会全速自旋耗尽 4.1GB 堆）
     const { deps } = makeDeps({ probeTcp: jest.fn().mockResolvedValue(false) });
-    await expect(
-      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
-    ).rejects.toThrow('启动超时');
+    await expect(ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps)).rejects.toThrow(
+      '启动超时',
+    );
   });
 
   it('readyTimeoutMs 双上限：探测次数封顶（时钟无关），超时后不再无限自旋', async () => {
@@ -248,9 +250,9 @@ describe('ensureEmbeddedMysql', () => {
         return false;
       }),
     });
-    await expect(
-      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
-    ).rejects.toThrow('启动超时');
+    await expect(ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps)).rejects.toThrow(
+      '启动超时',
+    );
     // 封顶 = 每次 waitReady ceil(200/250)+2 = 2 次探测（与时钟无关的硬上限）；
     // 首次 + 自愈重试共两轮 waitReady → 4 次（对照修复前：90s 全速自旋可达数十万次）
     expect(probeCalls).toBeLessThanOrEqual(4);
@@ -327,13 +329,13 @@ describe('ensureEmbeddedMysql', () => {
     });
     const probe = jest.fn().mockResolvedValue(false);
     const existsSync = ((pp: string) =>
-        pp.endsWith('mysqld.exe') || (pp.includes('mysql') && !pp.endsWith('.ops-initialized'))
-      ) as never; // 哨兵缺席
+      pp.endsWith('mysqld.exe') ||
+      (pp.includes('mysql') && !pp.endsWith('.ops-initialized'))) as never; // 哨兵缺席
     const { deps } = makeDeps({ spawnFn, probeTcp: probe, existsSync });
     const t0 = Date.now();
-    await expect(
-      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
-    ).rejects.toThrow('启动超时');
+    await expect(ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps)).rejects.toThrow(
+      '启动超时',
+    );
     const inst1 = (spawnFn.mock.calls[0] as unknown[])[1] as string[];
     expect(inst1.some((a) => a === '--initialize-insecure')).toBe(false); // 首次为启动而非初始化
     expect(deps.removeDir).toHaveBeenCalled(); // 错误路径清理执行（自愈）
@@ -362,9 +364,7 @@ describe('ensureEmbeddedMysql', () => {
     // 完成哨兵缺席（首启被中断的残留）→ 启动失败后进入自愈清理
     const existsSync = ((pp: string) => !pp.endsWith('.' + 'ops-initialized')) as never;
     const { deps } = makeDeps({ spawnFn, probeTcp: probe, existsSync });
-    await expect(
-      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
-    ).rejects.toThrow();
+    await expect(ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps)).rejects.toThrow();
     expect(deps.removeDir).toHaveBeenCalled(); // 异常路径同样清理（初始化阶段无 child，以目录清理断言）
   });
 
@@ -376,9 +376,9 @@ describe('ensureEmbeddedMysql', () => {
         return false;
       }),
     });
-    await expect(
-      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
-    ).rejects.toThrow('启动超时');
+    await expect(ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps)).rejects.toThrow(
+      '启动超时',
+    );
     // 首次 + 自愈重试各一轮，每轮封顶 ceil(200/250)+2 = 2 次
     expect(probeCalls).toBeLessThanOrEqual(4);
   });
@@ -386,9 +386,9 @@ describe('ensureEmbeddedMysql', () => {
   it('超时路径：readyTimeoutMs 生效使套件毫秒级完成（对照修复前 90s 自旋 OOM）', async () => {
     const t0 = Date.now();
     const { deps } = makeDeps({ probeTcp: jest.fn().mockResolvedValue(false) });
-    await expect(
-      ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps),
-    ).rejects.toThrow('启动超时');
+    await expect(ensureEmbeddedMysql({ ...baseCfg, readyTimeoutMs: 200 }, deps)).rejects.toThrow(
+      '启动超时',
+    );
     expect(Date.now() - t0).toBeLessThan(5000); // 修复前：90s 自旋
   });
 
@@ -454,7 +454,14 @@ describe('ensureEmbeddedMysql', () => {
       expect(found).toContain('mysql-8.0.28-winx64');
     });
     it('全部缺失返回 null', () => {
-      expect(resolveMysqlHome('D:/app', undefined, () => false, () => [])).toBeNull();
+      expect(
+        resolveMysqlHome(
+          'D:/app',
+          undefined,
+          () => false,
+          () => [],
+        ),
+      ).toBeNull();
     });
   });
 });

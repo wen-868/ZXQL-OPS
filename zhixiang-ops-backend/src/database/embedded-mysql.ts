@@ -46,7 +46,12 @@ export interface EmbeddedMysqlDeps {
     database: string;
   }) => Promise<void>;
   /** 幂等同步 root 认证：能按配置密码连接则跳过；否则以空密码接管并设置（首次初始化/改密场景） */
-  syncRootAuth: (opts: { host: string; port: number; user: string; password: string }) => Promise<void>;
+  syncRootAuth: (opts: {
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+  }) => Promise<void>;
   existsSync: (p: string) => boolean;
   mkdirSync: (p: string, opts?: { recursive?: boolean }) => void;
   readdirSync: (p: string) => string[];
@@ -85,7 +90,8 @@ export function resolveMysqlHome(
   exists: (p: string) => boolean,
   readdir: (p: string) => string[],
 ): string | null {
-  const hasMysqld = (dir: string) => exists(join(dir, 'bin', 'mysqld.exe')) || exists(join(dir, 'bin', 'mysqld'));
+  const hasMysqld = (dir: string) =>
+    exists(join(dir, 'bin', 'mysqld.exe')) || exists(join(dir, 'bin', 'mysqld'));
   const candidates: string[] = [];
   if (explicitHome) candidates.push(explicitHome);
   candidates.push(join(rootDir, 'vendor', 'mysql'));
@@ -105,7 +111,13 @@ function defaultDeps(): EmbeddedMysqlDeps {
     spawn: nodeSpawn,
     probeTcp,
     createDatabase: async ({ host, port, user, password, database }) => {
-      const conn = await mysql.createConnection({ host, port, user, password, multipleStatements: true });
+      const conn = await mysql.createConnection({
+        host,
+        port,
+        user,
+        password,
+        multipleStatements: true,
+      });
       try {
         await conn.query(
           `CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
@@ -117,7 +129,13 @@ function defaultDeps(): EmbeddedMysqlDeps {
     syncRootAuth: async ({ host, port, user, password }) => {
       const canConnect = async (pwd: string): Promise<boolean> => {
         try {
-          const c = await mysql.createConnection({ host, port, user, password: pwd, connectTimeout: 3000 });
+          const c = await mysql.createConnection({
+            host,
+            port,
+            user,
+            password: pwd,
+            connectTimeout: 3000,
+          });
           await c.end().catch(() => undefined);
           return true;
         } catch {
@@ -337,7 +355,9 @@ async function waitReady(
     if (await deps.probeTcp(cfg.host, cfg.port, 1000)) return;
     await deps.sleep(500);
   }
-  throw new Error(`内嵌 mysqld 启动超时（等待 ${timeoutMs}ms，探测 ${probes} 次），请查看错误日志: ${errLog}`);
+  throw new Error(
+    `内嵌 mysqld 启动超时（等待 ${timeoutMs}ms，探测 ${probes} 次），请查看错误日志: ${errLog}`,
+  );
 }
 
 /** 等待子进程退出（初始化步骤）；非 0 退出抛错（附错误日志尾部） */
