@@ -5,9 +5,7 @@ using System.Windows.Forms;
 
 // 智享全链运营系统 · 桌面版安装器（自解压）
 // 双击 → 解压 payload 到同目录 zhixiang-ops-desktop/ → 创建桌面快捷方式 → 启动桌面客户端。
-// 编译：csc /nologo /target:winexe /platform:anycpu /optimize /out:DesktopInstaller.exe
-//       /r:System.dll /r:System.Core.dll /r:System.Windows.Forms.dll /r:Microsoft.CSharp.dll
-//       DesktopInstaller.cs
+// OPS-SECURITY-DESKTOP-MODERNIZATION-01：现代 .NET / dotnet publish 主链；tar 调用使用 ArgumentList，禁止 Arguments 字符串拼接。
 public class DesktopInstaller
 {
     [STAThread]
@@ -47,13 +45,8 @@ public class DesktopInstaller
             if (!File.Exists(verFile))
             {
                 Directory.CreateDirectory(outDir);
-                // OPS-SECURITY-BASELINE-01：参数经白名单转义（Q，MSVCRT 引号规则）后传递，禁止裸拼接（防参数注入）
-                var psi = new ProcessStartInfo(tarExe)
-                {
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                    Arguments = BuildTarArguments(payload, outDir)
-                };
+                // OPS-SECURITY-DESKTOP-MODERNIZATION-01：ArgumentList 结构化参数，禁止 Arguments 字符串拼接。
+                var psi = InstallerCommandBuilder.BuildExtractTar(tarExe, payload, outDir);
                 using (var p = Process.Start(psi))
                 {
                     p.WaitForExit();
@@ -93,26 +86,8 @@ public class DesktopInstaller
         }
     }
 
-    // OPS-SECURITY-BASELINE-01：Windows 参数白名单转义（MSVCRT 引号规则），禁止裸拼接
-    // OPS-SECURITY-BASELINE-01：tar 参数由纯函数构造（固定开关 + 白名单转义路径），调用点零拼接
-    private static string BuildTarArguments(string payload, string outDir)
-    {
-        return "-xf " + Q(payload) + " -C " + Q(outDir);
-    }
-
-    private static string Q(string s)
-    {
-        var sb = new System.Text.StringBuilder("\"");
-        int backs = 0;
-        foreach (char c in s)
-        {
-            if (c == '\\') { backs++; sb.Append('\\'); }
-            else if (c == '"') { sb.Append('\\', backs + 1).Append('"'); backs = 0; }
-            else { backs = 0; sb.Append(c); }
-        }
-        sb.Append('"');
-        return sb.ToString();
-    }
+    // OPS-SECURITY-DESKTOP-MODERNIZATION-01：BuildTarArguments/Q 字符串拼接路径已废弃并移除；
+    // tar 调用改由 InstallerCommandBuilder.ArgumentList 构造。
 
     private static void CreateShortcut(string targetExe, string workingDir)
     {

@@ -10,7 +10,8 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-// 智享全链运营系统 · 原生桌面客户端（WinForms + WebView2，.NET Framework 4.8）
+// 智享全链运营系统 · 原生桌面客户端（WinForms + WebView2，现代 .NET / net8.0-windows）
+// OPS-SECURITY-DESKTOP-MODERNIZATION-01：进程启动统一走 DesktopCommandBuilder + ArgumentList，禁止 Arguments 字符串拼接。
 public class DesktopApp
 {
     [DllImport("user32.dll")]
@@ -207,14 +208,8 @@ Text = "智享全链运营系统";
         }
         servicesStarting = true;
         stInfo.Text = "正在启动本地服务（MariaDB/Redis/后端/门户）…";
-        // OPS-SECURITY-BASELINE-01：参数白名单转义（Q），禁止裸拼接
-        ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
-            BuildStartArgs(startPs))
-        {
-            WorkingDirectory = baseDir,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        // OPS-SECURITY-DESKTOP-MODERNIZATION-01：ArgumentList 结构化参数，禁止 Arguments 字符串拼接。
+        ProcessStartInfo psi = DesktopCommandBuilder.BuildStartService(startPs, baseDir);
         try
         {
             Process p = Process.Start(psi);
@@ -300,14 +295,8 @@ Text = "智享全链运营系统";
         if (!File.Exists(startPs)) return;
         try
         {
-            // OPS-SECURITY-BASELINE-01：参数白名单转义（Q），禁止裸拼接
-            ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
-                BuildStartArgs(startPs) + " -Rollback")
-            {
-                WorkingDirectory = baseDir,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
+            // OPS-SECURITY-DESKTOP-MODERNIZATION-01：ArgumentList 结构化参数，禁止 Arguments 字符串拼接。
+            ProcessStartInfo psi = DesktopCommandBuilder.BuildRollbackService(startPs, baseDir);
             Process p = Process.Start(psi);
             if (!p.WaitForExit(20000)) { try { p.Kill(); } catch { } }
         }
@@ -342,31 +331,10 @@ Text = "智享全链运营系统";
         RunRollbackAsync();
     }
 
-    // OPS-SECURITY-BASELINE-01：Windows 参数白名单转义（MSVCRT 引号规则），禁止裸拼接
-    // OPS-SECURITY-BASELINE-01：进程参数由纯函数构造（固定开关 + 白名单转义路径），调用点零拼接
-    private static string BuildStartArgs(string startPs)
-    {
-        return "-NoProfile -ExecutionPolicy Bypass -File " + Q(startPs);
-    }
-
-    private static string BuildExplorerArgs(string dir)
-    {
-        return Q(dir);
-    }
-
-    private static string Q(string s)
-    {
-        var sb = new System.Text.StringBuilder("\"");
-        int backs = 0;
-        foreach (char c in s)
-        {
-            if (c == '\\') { backs++; sb.Append('\\'); }
-            else if (c == '"') { sb.Append('\\', backs + 1).Append('"'); backs = 0; }
-            else { backs = 0; sb.Append(c); }
-        }
-        sb.Append('"');
-        return sb.ToString();
-    }
+    // OPS-SECURITY-DESKTOP-MODERNIZATION-01：字符串拼接式参数构造（BuildStartArgs/Q）已废弃并移除。
+    // 受控调用（start.ps1/Rollback）使用 DesktopCommandBuilder.ArgumentList。
+    // explorer.exe 因 Shell 行为无法可靠使用 ArgumentList，单独最小化为受控绝对路径单参数（见 Builder），
+    // 不接受外部输入，不追加额外 token。
 
     private void OpenLogDir()
     {
@@ -374,8 +342,7 @@ Text = "智享全链运营系统";
         if (!Directory.Exists(logs)) Directory.CreateDirectory(logs);
         try
         {
-            // OPS-SECURITY-BASELINE-01：参数白名单转义（Q），禁止裸拼接
-            var psi = new ProcessStartInfo("explorer.exe") { UseShellExecute = false, Arguments = BuildExplorerArgs(logs) };
+            var psi = DesktopCommandBuilder.BuildOpenLogsExplorer(logs);
             Process.Start(psi);
         }
         catch { }
