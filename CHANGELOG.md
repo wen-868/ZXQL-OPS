@@ -63,7 +63,7 @@
 ### 运维 / 文档
 - `eslint.config.mjs`：`no-unsafe-*` 等 type-checked 系列由 error 降为 warn（存量 57 文件 100+ 处 `any` 传播，与复杂度门禁同一治理策略——warn 收敛，不阻断合并）；**未用变量/导入仍为 error 硬门禁**，本轮清零。
 - 清理垃圾文件：删除 UTF-16 编码的空壳 `REPORT.md` 与运行时 `dump.rdb`；`.gitignore` 补 `*.rdb/*.aof` 与 `.mimosa/`。
-- `docs/architecture.md` 模块边界规则按实际依赖校准：废除「禁止跨模块 import」的不实声明，改为「基建/N 审计可依赖 + 内容主链单向无环 + 聚合模块白名单 + 跨域实体只读约定」。
+- `projects/ops/archive/repo-docs-20261107/docs/architecture.md` 模块边界规则按实际依赖校准：废除「禁止跨模块 import」的不实声明，改为「基建/N 审计可依赖 + 内容主链单向无环 + 聚合模块白名单 + 跨域实体只读约定」。
 
 ## [0.2.0] - 2026-08-25
 
